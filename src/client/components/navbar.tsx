@@ -88,7 +88,7 @@ export function Navbar({
       className={cn(
         "relative transition-all duration-300",
         solid
-          ? "bg-page/90 backdrop-blur-xl shadow-[0_2px_20px_rgba(13,31,23,0.08)]"
+          ? "bg-page/90 backdrop-blur-xl border-b border-fg/5 shadow-[0_2px_20px_rgba(13,31,23,0.08)]"
           : "bg-transparent",
       )}
     >

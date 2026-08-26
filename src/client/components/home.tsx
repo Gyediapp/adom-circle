@@ -122,6 +122,14 @@ export function Home({
           <div className="absolute inset-0 hero-grid opacity-60" />
         </div>
 
+        {/* Oversized brand watermark — subtle premium depth */}
+        <div
+          className="pointer-events-none absolute -right-20 top-1/2 hidden -translate-y-1/2 rotate-6 opacity-[0.07] xl:block"
+          aria-hidden
+        >
+          <LogoMark size={420} />
+        </div>
+
         <div className="relative mx-auto flex min-h-[100svh] max-w-7xl flex-col justify-center px-4 pb-24 pt-32 sm:px-6">
           <div className="max-w-3xl">
             <p className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-cream/20 bg-page/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-gold-soft backdrop-blur">
@@ -135,7 +143,7 @@ export function Home({
                 <button
                   key={q.tab}
                   onClick={() => go(q.tab)}
-                  className="group flex items-center gap-2.5 rounded-2xl border border-cream/20 bg-cream/10 px-4 py-2.5 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-flag-gold hover:border-flag-gold cursor-pointer"
+                  className="group flex items-center gap-2.5 rounded-2xl border border-white/15 bg-white/8 px-4 py-2.5 backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:bg-flag-gold hover:border-flag-gold hover:shadow-glow-gold cursor-pointer"
                   title={q.hint}
                 >
                   <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-flag-red/90 text-cream shadow-md transition-colors group-hover:bg-ink group-hover:text-flag-gold">
@@ -157,10 +165,10 @@ export function Home({
               <SocialLinks socials={settings?.socials ?? []} tone="light" />
             </div>
 
-            <h1 className="animate-fade-up font-display text-5xl font-black leading-[1.02] sm:text-7xl lg:text-8xl" style={{ animationDelay: "0.1s" }}>
+            <h1 className="animate-fade-up font-display text-5xl font-black leading-[1.02] tracking-tight sm:text-7xl lg:text-8xl" style={{ animationDelay: "0.1s" }}>
               {settings?.hero.title}
               <br />
-              <span className="gold-gradient-text">{settings?.hero.highlight}</span>
+              <span className="gold-gradient-text italic">{settings?.hero.highlight}</span>
             </h1>
 
             <p className="animate-fade-up mt-6 max-w-xl text-base leading-relaxed text-cream/80 sm:text-lg" style={{ animationDelay: "0.2s" }}>
@@ -182,18 +190,26 @@ export function Home({
             </div>
 
             {/* Stats bar */}
-            <div className="animate-fade-up mt-14 grid max-w-2xl grid-cols-2 gap-6 border-t border-cream/15 pt-8 sm:grid-cols-4" style={{ animationDelay: "0.45s" }}>
-              {[
-                { value: formatNumber(stats?.members ?? 12480), label: "Members" },
-                { value: formatNumber(stats?.projects ?? 86), label: "Projects" },
-                { value: "16", label: "Regions united" },
-                { value: `${formatNumber(stats?.hours ?? 52300)}+`, label: "Volunteer hours" },
-              ].map((s) => (
-                <div key={s.label}>
-                  <p className="font-display text-3xl font-bold text-flag-gold">{s.value}</p>
-                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-cream/60">{s.label}</p>
-                </div>
-              ))}
+            <div className="animate-fade-up mt-14 max-w-2xl" style={{ animationDelay: "0.45s" }}>
+              <div className="mb-7 flex items-center gap-3">
+                <span className="flag-stripes h-[3px] w-28 rounded-full" aria-hidden />
+                <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-cream/45">
+                  The circle in numbers
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+                {[
+                  { value: formatNumber(stats?.members ?? 12480), label: "Members" },
+                  { value: formatNumber(stats?.projects ?? 86), label: "Projects" },
+                  { value: "16", label: "Regions united" },
+                  { value: `${formatNumber(stats?.hours ?? 52300)}+`, label: "Volunteer hours" },
+                ].map((s) => (
+                  <div key={s.label}>
+                    <p className="font-display text-3xl font-bold text-flag-gold">{s.value}</p>
+                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-cream/60">{s.label}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -205,27 +221,29 @@ export function Home({
       </section>
 
       {/* ================= FLAG MARQUEE ================= */}
-      <div className="flag-stripes relative z-10 overflow-hidden py-2.5">
-        <div className="flex w-max animate-marquee gap-8">
+      <div className="relative z-10 overflow-hidden bg-ink py-4">
+        <div className="flag-stripes h-[3px] w-full" aria-hidden />
+        <div className="flex w-max animate-marquee gap-12 py-2.5">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-8 whitespace-nowrap text-[13px] font-bold uppercase tracking-[0.3em] text-fg">
-              <span>One Circle</span>
-              <Star size={13} />
-              <span>One Ghana</span>
-              <Star size={13} />
-              <span>Peace</span>
-              <Star size={13} />
-              <span>Progress</span>
-              <Star size={13} />
-              <span>Constitution Above All</span>
-              <Star size={13} />
-              <span>16 Regions</span>
-              <Star size={13} />
-              <span>Black Star Forever</span>
-              <Star size={13} />
+            <div key={i} className="flex items-center gap-12 whitespace-nowrap text-[12px] font-bold uppercase tracking-[0.32em]">
+              <span className="text-cream/75">One Circle</span>
+              <Star size={12} className="text-flag-gold" />
+              <span className="text-flag-gold">One Ghana</span>
+              <Star size={12} className="text-flag-red" />
+              <span className="text-cream/75">Peace</span>
+              <Star size={12} className="text-flag-gold" />
+              <span className="text-flag-gold">Progress</span>
+              <Star size={12} className="text-flag-green" />
+              <span className="text-cream/75">Constitution Above All</span>
+              <Star size={12} className="text-flag-gold" />
+              <span className="text-flag-gold">16 Regions</span>
+              <Star size={12} className="text-flag-red" />
+              <span className="text-cream/75">Black Star Forever</span>
+              <Star size={12} className="text-flag-green" />
             </div>
           ))}
         </div>
+        <div className="flag-stripes h-[3px] w-full" aria-hidden />
       </div>
 
       {/* ================= MISSION / VALUES ================= */}
@@ -237,7 +255,7 @@ export function Home({
               title={<>A circle that holds <span className="text-flag-red">Ghana</span> together.</>}
               sub={settings?.mission}
             />
-            <div className="mt-8 rounded-3xl border border-flag-gold/50 bg-gold-soft/25 p-6">
+            <div className="mt-8 rounded-3xl border border-flag-gold/40 border-l-4 border-l-flag-gold bg-gold-soft/25 p-6 shadow-sm">
               <p className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-clay">
                 <Landmark size={16} /> The Constitution is supreme
               </p>

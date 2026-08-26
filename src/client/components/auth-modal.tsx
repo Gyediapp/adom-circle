@@ -174,6 +174,7 @@ export function AuthModal({
             <p className="mt-1 text-sm text-fg/50">{t("joinSub")} 🇬🇭</p>
           </div>
         </div>
+        <span className="flag-stripes mb-6 block h-[3px] w-20 rounded-full" aria-hidden />
 
         {/* ============ LOGIN / FORGOT / RESET ============ */}
         {mode === "login" && authView === "login" && (
@@ -207,7 +208,7 @@ export function AuthModal({
                 Forgot password?
               </button>
             </div>
-            <Button variant="dark" className="w-full py-3" onClick={handleLogin} disabled={busy}>
+            <Button variant="gold" className="w-full py-3" onClick={handleLogin} disabled={busy}>
               {busy ? <Loader2 size={16} className="animate-spin" /> : "Sign in to the Circle"}
             </Button>
             <p className="text-center text-xs text-fg/45">
@@ -241,7 +242,7 @@ export function AuthModal({
                 className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
               />
             </label>
-            <Button variant="dark" className="w-full py-3" onClick={handleForgot} disabled={busy}>
+            <Button variant="gold" className="w-full py-3" onClick={handleForgot} disabled={busy}>
               {busy ? <Loader2 size={16} className="animate-spin" /> : "Send reset code"}
             </Button>
             <p className="text-center text-xs">
@@ -276,7 +277,7 @@ export function AuthModal({
               placeholder="New password (min 8 characters)"
               className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
             />
-            <Button variant="dark" className="w-full py-3" onClick={handleReset} disabled={busy}>
+            <Button variant="gold" className="w-full py-3" onClick={handleReset} disabled={busy}>
               {busy ? <Loader2 size={16} className="animate-spin" /> : "Reset password"}
             </Button>
             <p className="text-center text-xs">
@@ -369,7 +370,7 @@ export function AuthModal({
                   </label>
                 </div>
 
-                <Button variant="dark" className="w-full py-3" onClick={handleSignup}>
+                <Button variant="gold" className="w-full py-3" onClick={handleSignup}>
                   Continue — your Ghana connection
                 </Button>
               </div>
@@ -455,7 +456,7 @@ export function AuthModal({
                   className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-4 text-center font-display text-3xl tracking-[0.5em] outline-none focus:border-flag-green focus:ring-2 focus:ring-flag-green/20"
                 />
 
-                <Button variant="dark" className="w-full py-3" onClick={handleSignup} disabled={busy}>
+                <Button variant="gold" className="w-full py-3" onClick={handleSignup} disabled={busy}>
                   {busy ? <Loader2 size={16} className="animate-spin" /> : "Verify my email"}
                 </Button>
 

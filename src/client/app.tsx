@@ -14,7 +14,7 @@ import { Civic } from "@/client/components/civic";
 import { Economy } from "@/client/components/economy";
 import { About } from "@/client/components/about";
 import { Admin } from "@/client/components/admin";
-import { LogoMark } from "@/client/lib/logo";
+import { LogoMark, Star } from "@/client/lib/logo";
 import { LangProvider, useI18n } from "@/client/lib/i18n";
 import { cn } from "@/client/lib/format";
 
@@ -88,8 +88,9 @@ function Shell() {
       {/* Fixed header stack: announcement + navbar */}
       <div className="fixed inset-x-0 top-0 z-50">
         {settings?.announcement.enabled && (
-          <div className="flag-stripes px-4 py-2 text-center text-[13px] font-bold text-fg">
-            {settings.announcement.text}
+          <div className="flag-stripes flex items-center justify-center gap-2 px-4 py-2 text-center text-[12.5px] font-bold tracking-wide text-ink">
+            <Star size={13} className="shrink-0" aria-hidden />
+            <span>{settings.announcement.text}</span>
           </div>
         )}
         <Navbar tab={tab} onTab={onTab} onAuth={onAuth} overDark={overDark} />

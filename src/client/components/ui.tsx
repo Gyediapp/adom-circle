@@ -13,7 +13,7 @@ export function Button({
     primary:
       "bg-flag-red text-cream hover:bg-[#a80d1e] shadow-lg shadow-flag-red/25",
     gold:
-      "bg-flag-gold text-fg hover:bg-gold-deep hover:text-cream shadow-lg shadow-flag-gold/25",
+      "bg-gradient-to-b from-[#ffdf4d] via-flag-gold to-[#e8b30a] text-ink hover:from-[#ffe98a] hover:to-gold-deep shadow-lg shadow-flag-gold/30",
     ghost: "text-fg hover:bg-ink/5",
     outline: "border border-fg/20 text-fg hover:border-flag-red hover:text-flag-red",
     danger: "bg-flag-red text-cream hover:bg-[#a80d1e]",
@@ -22,7 +22,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
+        "btn-shine inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
         styles[variant],
         className,
       )}
@@ -73,7 +73,7 @@ export function Card({
     <div
       className={cn(
         "rounded-3xl bg-card shadow-[0_2px_16px_rgba(13,31,23,0.06)] border border-fg/5",
-        hover && "card-lift",
+        hover && "card-lift hover:border-flag-gold/70",
         className,
       )}
     >
@@ -97,8 +97,8 @@ export function SectionHeading({
 }) {
   return (
     <div className={cn("max-w-2xl", className)}>
-      <p className="mb-3 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-flag-red">
-        <span className="h-px w-8 bg-flag-red/60" />
+      <p className="mb-3 inline-flex items-center gap-2.5 text-xs font-bold uppercase tracking-[0.25em] text-flag-red">
+        <span className="flag-stripes h-[3px] w-10 rounded-full" aria-hidden />
         {eyebrow}
       </p>
       <h2

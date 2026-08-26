@@ -52,7 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
     title: "One Circle.",
     highlight: "One Ghana.",
     subtitle:
-      "Adom Circle unites Ghanaians at home and abroad to contribute to our nation's peace, development and prosperity — under one Constitution, above every institution.",
+      "Adom Circle unites Ghanaians at home and abroad in service of peace, development and prosperity — under one Constitution, above every institution.",
     image: "/output/images/hero.jpg",
   },
   stats: {

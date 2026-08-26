@@ -26,6 +26,11 @@
   --color-fg: #0d1f17;
   --color-clay: #7c4a03;
 
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgba(13, 31, 23, 0.04), 0 8px 24px -12px rgba(13, 31, 23, 0.12);
+  --shadow-lift: 0 2px 4px rgba(13, 31, 23, 0.05), 0 24px 48px -16px rgba(13, 31, 23, 0.22);
+  --shadow-glow-gold: 0 8px 32px -8px rgba(252, 209, 22, 0.45);
+
   --animate-fade-up: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-fade-in: fade-in 0.9s ease both;
   --animate-float: float 7s ease-in-out infinite;
@@ -102,10 +107,22 @@ body {
 }
 
 .gold-gradient-text {
-  background: linear-gradient(100deg, #ffe89a 0%, #fcd116 45%, #f0b90a 70%, #ffe89a 100%);
+  background: linear-gradient(100deg, #ffe89a 0%, #fcd116 38%, #f0b90a 62%, #ffe89a 100%);
+  background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: gold-sheen 7s ease-in-out infinite;
+}
+
+@keyframes gold-sheen {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
 .hero-grid {
@@ -119,11 +136,14 @@ body {
 }
 
 .card-lift {
-  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease;
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s ease,
+    border-color 0.35s ease;
 }
 .card-lift:hover {
   transform: translateY(-6px);
-  box-shadow: 0 24px 48px -16px rgba(13, 31, 23, 0.28);
+  box-shadow: var(--shadow-lift);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -132,4 +152,45 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Button shine sweep — premium micro-interaction */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 45%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: translateX(-160%) skewX(-18deg);
+  transition: transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+.btn-shine:hover::after {
+  transform: translateX(320%) skewX(-18deg);
+}
+
+/* Consistent, premium focus rings */
+:focus-visible {
+  outline: 2px solid var(--color-flag-gold);
+  outline-offset: 2px;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
