@@ -31,6 +31,7 @@ import { regionName } from "@/server/data/regions";
 import type { Message, ReactionType } from "@/server/rpc/community";
 import type { PublicMember } from "@/server/rpc/members";
 import { DmModal } from "./dm-modal";
+import { ShareModal, type ShareTarget } from "./share-modal";
 
 type ChatMsg = Message & { authorPoints: number; authorRole: string };
 
@@ -56,6 +57,7 @@ export function Community() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
   // @mentions
   const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -349,22 +351,13 @@ export function Community() {
     setDmOpen(true);
   };
 
-  const shareMessage = async (m: ChatMsg) => {
-    const text = `"${m.text}" — ${m.authorName}, in ${activeRoom?.name} on Adom Circle 🇬🇭`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ text });
-      } catch {
-        /* user cancelled */
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText(text);
-        toast("Copied — paste it anywhere to share");
-      } catch {
-        toast("Couldn't share", "error");
-      }
-    }
+  const shareMessage = (m: ChatMsg) => {
+    if (!m.text && !m.audio) return;
+    setShareTarget({
+      text: m.text || "🎤 Voice message",
+      authorName: m.authorName,
+      roomName: activeRoom?.name ?? undefined,
+    });
   };
 
   return (
@@ -683,6 +676,9 @@ export function Community() {
 
       {/* Private messages */}
       <DmModal open={dmOpen} onClose={() => setDmOpen(false)} initialTarget={dmTarget} />
+
+      {/* Share dialog */}
+      <ShareModal open={!!shareTarget} onClose={() => setShareTarget(null)} target={shareTarget} />
     </div>
   );
 }

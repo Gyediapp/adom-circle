@@ -137,10 +137,10 @@ export function Home({
   }, [threads]);
 
   const shareThread = (title: string, authorName: string) => {
-    const text = `🔥 ${title} — ${authorName} on Adom Circle 🇬🇭 Join the discussion: https://adomcircle.org/#/community`;
+    const text = `🔥 ${title} — ${authorName} on Adom Circle 🇬🇭 Join the discussion: https://adomcircle.org/community`;
     return {
       whatsapp: `https://wa.me/?text=${encodeURIComponent(text)}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fadomcircle.org%2F%23%2Fcommunity&quote=${encodeURIComponent(text)}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://adomcircle.org/community")}&quote=${encodeURIComponent(text)}`,
       text,
     };
   };
@@ -819,13 +819,13 @@ export function Home({
                     <button
                       onClick={async () => {
                         try {
-                          await navigator.clipboard.writeText(share.text);
-                          toast("Copied — paste it anywhere to share");
+                          await navigator.clipboard.writeText("https://adomcircle.org/community");
+                          toast("Link copied — paste it anywhere to share");
                         } catch {
                           toast("Couldn't copy", "error");
                         }
                       }}
-                      title="Copy text"
+                      title="Copy link"
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-ink/5 text-fg/60 hover:bg-ink hover:text-cream transition-colors cursor-pointer"
                     >
                       <Link2 size={15} />
