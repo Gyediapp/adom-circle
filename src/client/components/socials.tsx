@@ -1,5 +1,6 @@
-import { Share2, MessageCircle, Play, Music2, Globe } from "lucide-react";
+import { Globe } from "lucide-react";
 import { cn } from "@/client/lib/format";
+import { FacebookIcon, WhatsAppIcon, YouTubeIcon, TikTokIcon } from "@/client/lib/brand-icons";
 
 export type SocialLink = {
   platform: "facebook" | "whatsapp" | "youtube" | "tiktok" | "other";
@@ -8,10 +9,10 @@ export type SocialLink = {
 };
 
 const ICONS = {
-  facebook: Share2,
-  whatsapp: MessageCircle,
-  youtube: Play,
-  tiktok: Music2,
+  facebook: FacebookIcon,
+  whatsapp: WhatsAppIcon,
+  youtube: YouTubeIcon,
+  tiktok: TikTokIcon,
   other: Globe,
 };
 

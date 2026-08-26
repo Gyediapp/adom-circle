@@ -16,10 +16,6 @@ import {
   HandHeart,
   Megaphone,
   Video,
-  Share2,
-  Play,
-  MessageCircle,
-  Music2,
   Handshake,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -27,6 +23,7 @@ import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { useI18n } from "@/client/lib/i18n";
 import { SocialLinks } from "./socials";
+import { FacebookIcon, WhatsAppIcon, YouTubeIcon, TikTokIcon } from "@/client/lib/brand-icons";
 import { Button, Card, Chip, SectionHeading, Stat, ProgressBar } from "./ui";
 import { LogoMark, Star } from "@/client/lib/logo";
 import { GHANA_REGIONS } from "@/server/data/regions";
@@ -60,10 +57,10 @@ const SOCIAL_BRANDS: Array<{
   icon: React.ElementType;
   bg: string;
 }> = [
-  { platform: "whatsapp", title: "WhatsApp Channel", tagline: "Daily announcements", icon: MessageCircle, bg: "linear-gradient(135deg, #25D366 0%, #128C7E 100%)" },
-  { platform: "youtube", title: "YouTube", tagline: "Watch our stories", icon: Play, bg: "linear-gradient(135deg, #FF0000 0%, #b30000 100%)" },
-  { platform: "facebook", title: "Facebook", tagline: "Page & discussion group", icon: Share2, bg: "linear-gradient(135deg, #1877F2 0%, #0e5fd8 100%)" },
-  { platform: "tiktok", title: "TikTok", tagline: "Short clips & vibes", icon: Music2, bg: "linear-gradient(135deg, #000000 0%, #1d4a38 100%)" },
+  { platform: "whatsapp", title: "WhatsApp Channel", tagline: "Daily announcements", icon: WhatsAppIcon, bg: "linear-gradient(135deg, #25D366 0%, #128C7E 100%)" },
+  { platform: "youtube", title: "YouTube", tagline: "Watch our stories", icon: YouTubeIcon, bg: "linear-gradient(135deg, #FF0000 0%, #b30000 100%)" },
+  { platform: "facebook", title: "Facebook", tagline: "Page & discussion group", icon: FacebookIcon, bg: "linear-gradient(135deg, #1877F2 0%, #0e5fd8 100%)" },
+  { platform: "tiktok", title: "TikTok", tagline: "Short clips & vibes", icon: TikTokIcon, bg: "linear-gradient(135deg, #000000 0%, #1d4a38 100%)" },
 ];
 
 export function Home({
