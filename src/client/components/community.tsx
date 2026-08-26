@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Send,
@@ -11,21 +11,84 @@ import {
   Reply,
   MessagesSquare,
   Trash2,
+  Bookmark,
+  Share2,
+  UserPlus,
+  UserCheck,
+  MessageCircle,
+  CornerDownRight,
+  X,
+  Pencil,
+  Mic,
+  Square,
 } from "lucide-react";
-import { queryClient } from "@/client/rpc-client";
+import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { Button, Card, Avatar, Modal } from "./ui";
 import { RankChip } from "@/client/lib/ranks";
-import { timeAgo } from "@/client/lib/format";
+import { timeAgo, cn } from "@/client/lib/format";
 import { regionName } from "@/server/data/regions";
+import type { Message, ReactionType } from "@/server/rpc/community";
+import type { PublicMember } from "@/server/rpc/members";
+import { DmModal } from "./dm-modal";
+
+type ChatMsg = Message & { authorPoints: number; authorRole: string };
+
+const REACTIONS: Array<{ type: ReactionType; emoji: string; label: string }> = [
+  { type: "like", emoji: "👍", label: "Like" },
+  { type: "love", emoji: "❤️", label: "Love" },
+  { type: "smile", emoji: "😊", label: "Smile" },
+  { type: "angry", emoji: "😠", label: "Angry" },
+  { type: "undecided", emoji: "🤔", label: "Undecided" },
+];
 
 export function Community() {
   const { user, toast, requireUser } = useStore();
   const [roomId, setRoomId] = useState<string | null>(null);
   const [view, setView] = useState<"chat" | "forum">("chat");
   const [text, setText] = useState("");
+  const [replyingTo, setReplyingTo] = useState<{ id: string; name: string } | null>(null);
   const [reportTarget, setReportTarget] = useState<{ type: string; label: string } | null>(null);
   const [reportReason, setReportReason] = useState("");
+  const [dmOpen, setDmOpen] = useState(false);
+  const [dmTarget, setDmTarget] = useState<{ id: string; name: string } | null>(null);
+  const [followed, setFollowed] = useState<Set<string>>(() => new Set(requireUser()?.following ?? []));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  // @mentions
+  const [mentionIds, setMentionIds] = useState<string[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionResults, setMentionResults] = useState<Array<{ id: string; name: string }>>([]);
+  const mentionAtRef = useRef<number | null>(null);
+  const composerRef = useRef<HTMLInputElement>(null);
+  // voice messages
+  const supportsAudio =
+    typeof window !== "undefined" &&
+    typeof MediaRecorder !== "undefined" &&
+    !!navigator.mediaDevices?.getUserMedia;
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recChunksRef = useRef<Blob[]>([]);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [recSeconds, setRecSeconds] = useState(0);
+  const [audioData, setAudioData] = useState<string | null>(null);
+  const chatScroll = useRef<HTMLDivElement>(null);
+
+  // Debounced member search for the @mention dropdown
+  useEffect(() => {
+    if (!mentionQuery) {
+      setMentionResults([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      rpcClient.members
+        .search({ q: mentionQuery })
+        .then(setMentionResults)
+        .catch(() => setMentionResults([]));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [mentionQuery]);
 
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
   const { data: threads } = useQuery(queryClient.community.liveThreads.list.experimental_liveOptions());
@@ -41,11 +104,68 @@ export function Community() {
 
   const sendMessage = useMutation(
     queryClient.community.sendMessage.mutationOptions({
-      onSuccess: () => toast("Message sent"),
+      onSuccess: () => {
+        setText("");
+        setReplyingTo(null);
+        setMentionIds([]);
+        setAudioData(null);
+        requestAnimationFrame(() =>
+          chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" }),
+        );
+      },
       onError: (e: any) => toast(e?.message ?? "Failed to send", "error"),
     }),
   );
-
+  const react = useMutation(
+    queryClient.community.addReaction.mutationOptions({
+      onError: (e: any) => toast(e?.message ?? "Failed", "error"),
+    }),
+  );
+  const editMsg = useMutation(
+    queryClient.community.editMessage.mutationOptions({
+      onSuccess: () => {
+        setEditingId(null);
+        setEditText("");
+        toast("Message updated");
+      },
+      onError: (e: any) => toast(e?.message ?? "Failed to edit", "error"),
+    }),
+  );
+  const deleteMsg = useMutation(
+    queryClient.community.deleteMessage.mutationOptions({
+      onSuccess: () => {
+        setConfirmingDelete(null);
+        toast("Message deleted");
+      },
+      onError: (e: any) => toast(e?.message ?? "Not allowed", "error"),
+    }),
+  );
+  const saveMsg = useMutation(
+    queryClient.community.toggleSaveMessage.mutationOptions({
+      onSuccess: (_d, vars) =>
+        toast(
+          _d?.savedBy?.includes(vars.memberId) ? "Saved to your bookmarks 🔖" : "Removed from bookmarks",
+        ),
+      onError: (e: any) => toast(e?.message ?? "Failed", "error"),
+    }),
+  );
+  const follow = useMutation(
+    queryClient.members.follow.mutationOptions({
+      onSuccess: (updated) => {
+        const targetId = updated.following.at(-1) ?? "";
+        const following = updated.following.includes(follow.variables?.targetId ?? targetId);
+        setFollowed((prev) => {
+          const next = new Set(prev);
+          const id = follow.variables?.targetId ?? targetId;
+          if (following) next.add(id);
+          else next.delete(id);
+          return next;
+        });
+        toast(following ? "You're now following them" : "Unfollowed");
+      },
+      onError: (e: any) => toast(e?.message ?? "Failed", "error"),
+    }),
+  );
   const createThread = useMutation(
     queryClient.community.createThread.mutationOptions({
       onSuccess: () => toast("Discussion started! 🗣️"),
@@ -61,9 +181,21 @@ export function Community() {
   );
 
   const likeThread = useMutation(queryClient.community.likeThread.mutationOptions());
-  const deleteMessage = useMutation(
-    queryClient.community.deleteMessage.mutationOptions({
-      onSuccess: () => toast("Message removed"),
+  const editThread = useMutation(
+    queryClient.community.editThread.mutationOptions({
+      onSuccess: () => toast("Discussion updated"),
+      onError: (e: any) => toast(e?.message ?? "Failed to edit", "error"),
+    }),
+  );
+  const editReply = useMutation(
+    queryClient.community.editReply.mutationOptions({
+      onSuccess: () => toast("Reply updated"),
+      onError: (e: any) => toast(e?.message ?? "Failed to edit", "error"),
+    }),
+  );
+  const deleteReply = useMutation(
+    queryClient.community.deleteReply.mutationOptions({
+      onSuccess: () => toast("Reply deleted"),
       onError: (e: any) => toast(e?.message ?? "Not allowed", "error"),
     }),
   );
@@ -88,9 +220,97 @@ export function Community() {
   const submitMessage = () => {
     if (!me) return toast("Sign in to join the conversation", "error");
     if (!activeRoom) return;
-    if (!text.trim()) return;
-    sendMessage.mutate({ memberId: me.id, roomId: activeRoom.id, text: text.trim() });
-    setText("");
+    if (!text.trim() && !audioData) return;
+    sendMessage.mutate({
+      memberId: me.id,
+      roomId: activeRoom.id,
+      text: text.trim(),
+      replyToId: replyingTo?.id ?? null,
+      mentionIds,
+      audio: audioData,
+    });
+  };
+
+  // @mention autocomplete
+  const handleComposerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setText(v);
+    const caret = e.target.selectionStart ?? v.length;
+    const before = v.slice(0, caret);
+    const at = before.lastIndexOf("@");
+    if (at >= 0 && (at === 0 || /\s/.test(before[at - 1]))) {
+      const q = before.slice(at + 1);
+      if (q.length <= 30 && !/[\s@]/.test(q)) {
+        mentionAtRef.current = at;
+        setMentionQuery(q);
+        return;
+      }
+    }
+    mentionAtRef.current = null;
+    setMentionQuery(null);
+  };
+
+  const pickMention = (m: { id: string; name: string }) => {
+    const at = mentionAtRef.current ?? text.length;
+    const before = text.slice(0, at);
+    const after = text.slice(at).replace(/^\S*/, "");
+    setText(`${before}@${m.name} ${after}`);
+    setMentionIds((ids) => (ids.includes(m.id) ? ids : [...ids, m.id]));
+    setMentionQuery(null);
+    composerRef.current?.focus();
+  };
+
+  // Voice message recording
+  const startRecording = async () => {
+    if (!me) return toast("Sign in to record a voice message", "error");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      mediaRecorderRef.current = rec;
+      recChunksRef.current = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) recChunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        const blob = new Blob(recChunksRef.current, { type: "audio/webm" });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setAudioData(reader.result as string);
+          stream.getTracks().forEach((t) => t.stop());
+        };
+        reader.readAsDataURL(blob);
+      };
+      rec.start();
+      setRecording(true);
+      setRecSeconds(0);
+      recTimerRef.current = setInterval(() => setRecSeconds((s) => s + 1), 1000);
+      // Hard cap at 60 seconds
+      setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") stopRecording();
+      }, 60_000);
+    } catch {
+      toast("Microphone access was denied or is unavailable", "error");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    if (recTimerRef.current) clearInterval(recTimerRef.current);
+    setRecording(false);
+  };
+
+  // Message threading: nest replies up to 2 levels by indentation; deeper
+  // replies flatten with an inline "in reply to" chip so phones stay readable.
+  const msgList = useMemo<ChatMsg[]>(() => messages ?? [], [messages]);
+  const msgById = useMemo(() => new Map(msgList.map((m) => [m.id, m])), [msgList]);
+  const replyDepth = (m: Message): number => {
+    let depth = 0;
+    let cur = m.replyToId;
+    while (cur && msgById.has(cur) && depth < 2) {
+      depth++;
+      cur = msgById.get(cur)?.replyToId ?? null;
+    }
+    return depth;
   };
 
   const roomThreads = useMemo(
@@ -110,11 +330,41 @@ export function Community() {
   };
   const selectRoom = (id: string) => {
     setRoomId(id);
+    setReplyingTo(null);
     scrollToPanel();
   };
   const selectView = (v: "chat" | "forum") => {
     setView(v);
     scrollToPanel();
+  };
+
+  const openDm = (m: ChatMsg) => {
+    if (!me) return toast("Sign in to message members", "error");
+    if (m.authorId === me.id) return;
+    if (me.points < 20) {
+      toast("Private messaging unlocks at 20 points — keep contributing!", "error");
+      return;
+    }
+    setDmTarget({ id: m.authorId, name: m.authorName });
+    setDmOpen(true);
+  };
+
+  const shareMessage = async (m: ChatMsg) => {
+    const text = `"${m.text}" — ${m.authorName}, in ${activeRoom?.name} on Adom Circle 🇬🇭`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ text });
+      } catch {
+        /* user cancelled */
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("Copied — paste it anywhere to share");
+      } catch {
+        toast("Couldn't share", "error");
+      }
+    }
   };
 
   return (
@@ -128,7 +378,7 @@ export function Community() {
             Where <span className="text-flag-green">Ghana talks.</span>
           </h1>
           <p className="mt-2 max-w-xl text-sm text-fg/60">
-            Respectful discussion, real connection. The Constitution above all — no hate speech, no incitement, everyone welcome.
+            Respectful discussion, real connection. React, reply and message — the Constitution above all, no hate speech, everyone welcome.
           </p>
         </div>
         <div className="flex gap-2">
@@ -174,7 +424,7 @@ export function Community() {
         {/* Main panel */}
         <div ref={panelRef} className="scroll-mt-32">
           {view === "chat" && activeRoom && (
-            <Card className="flex h-[68vh] flex-col overflow-hidden">
+            <Card className="flex h-[72vh] flex-col overflow-hidden">
               <div className="flex items-center justify-between border-b border-fg/8 px-5 py-3.5">
                 <div>
                   <p className="font-bold">{activeRoom.icon} {activeRoom.name}</p>
@@ -185,59 +435,145 @@ export function Community() {
                 </span>
               </div>
 
-              <div className="flex-1 space-y-3 overflow-y-auto bg-soft/40 px-5 py-4">
-                {messages?.map((m) => {
-                  const mine = m.authorId === me?.id;
-                  const canModerate = me
-                    ? me.role === "admin" ||
-                      (me.role === "moderator" && me.managedRooms.includes(activeRoom.id))
-                    : false;
-                  return (
-                    <div key={m.id} className={`flex gap-3 ${mine ? "flex-row-reverse" : ""}`}>
-                      <Avatar name={m.authorName} size={34} />
-                      <div className={`max-w-[78%] ${mine ? "text-right" : ""}`}>
-                        <div className={`mb-1 flex items-center gap-2 ${mine ? "justify-end" : ""} flex-wrap`}>
-                          <span className="text-[12px] font-bold">{m.authorName}</span>
-                          <RankChip points={(m as any).authorPoints ?? 0} role={(m as any).authorRole} />
-                          <span className="text-[10px] text-fg/40">{regionName(m.authorRegion)} · {timeAgo(m.createdAt)}</span>
-                          {canModerate && !mine && (
-                            <button
-                              onClick={() => me && deleteMessage.mutate({ memberId: me.id, messageId: m.id })}
-                              className="rounded-full p-1 text-fg/25 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
-                              title="Delete message (moderator)"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          )}
-                        </div>
-                        <div
-                          className={`inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-relaxed ${
-                            mine ? "bg-ink text-cream rounded-br-sm" : "bg-card border border-fg/5 rounded-bl-sm"
-                          }`}
-                        >
-                          {m.text}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {(!messages || messages.length === 0) && (
+              <div ref={chatScroll} className="flex-1 space-y-4 overflow-y-auto bg-soft/40 px-4 py-4 sm:px-5">
+                {msgList.length === 0 && (
                   <div className="flex h-full items-center justify-center text-sm text-fg/40">
                     Start the conversation in {activeRoom.name} 💬
                   </div>
                 )}
+                {msgList.map((m) => (
+                  <ChatMessage
+                    key={m.id}
+                    m={m}
+                    me={me}
+                    depth={replyDepth(m)}
+                    parentName={m.replyToId ? msgById.get(m.replyToId)?.authorName ?? null : null}
+                    followed={followed.has(m.authorId)}
+                    canModerate={
+                      !!me &&
+                      (me.role === "admin" ||
+                        (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
+                    }
+                    onReact={(type) => me && react.mutate({ memberId: me.id, messageId: m.id, type })}
+                    onReply={() => {
+                      if (!me) return toast("Sign in to reply", "error");
+                      setReplyingTo({ id: m.id, name: m.authorName });
+                      chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
+                    }}
+                    onSave={() => me && saveMsg.mutate({ memberId: me.id, messageId: m.id })}
+                    onShare={() => shareMessage(m)}
+                    onFollow={() => me && follow.mutate({ memberId: me.id, targetId: m.authorId })}
+                    onDm={() => openDm(m)}
+                    onEdit={() => {
+                      setEditingId(m.id);
+                      setEditText(m.text);
+                    }}
+                    onDelete={() => {
+                      if (confirmingDelete === m.id) {
+                        me && deleteMsg.mutate({ memberId: me.id, messageId: m.id });
+                      } else {
+                        setConfirmingDelete(m.id);
+                        setTimeout(() => setConfirmingDelete((cur) => (cur === m.id ? null : cur)), 3000);
+                      }
+                    }}
+                    editing={editingId === m.id}
+                    editText={editText}
+                    onEditTextChange={setEditText}
+                    onEditSave={() => me && editMsg.mutate({ memberId: me.id, messageId: m.id, text: editText })}
+                    onEditCancel={() => {
+                      setEditingId(null);
+                      setEditText("");
+                    }}
+                    confirmingDelete={confirmingDelete === m.id}
+                    onReport={() => setReportTarget({ type: "message", label: `${m.authorName}: "${m.text.slice(0, 40)}…"` })}
+                  />
+                ))}
               </div>
 
               <div className="border-t border-fg/8 bg-card p-3.5">
+                {replyingTo && (
+                  <div className="mb-2 flex items-center gap-2 rounded-2xl bg-soft px-3 py-2 text-[12px] font-semibold text-fg/70">
+                    <CornerDownRight size={13} className="text-flag-red" />
+                    Replying to <strong>{replyingTo.name}</strong>
+                    <button
+                      onClick={() => setReplyingTo(null)}
+                      className="ml-auto rounded-full p-1 text-fg/40 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+                      aria-label="Cancel reply"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
+                {audioData ? (
+                  <div className="mb-2 flex items-center gap-2 rounded-2xl bg-soft px-3 py-2">
+                    <audio controls src={audioData} className="h-9 w-52 sm:w-64" />
+                    <button
+                      onClick={() => setAudioData(null)}
+                      className="rounded-full p-1.5 text-fg/40 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+                      title="Remove voice message"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : recording ? (
+                  <div className="mb-2 flex items-center gap-3 rounded-2xl bg-flag-red/10 px-4 py-2.5">
+                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-flag-red" />
+                    <span className="text-[13px] font-bold text-flag-red">{recSeconds}s</span>
+                    <span className="text-[12px] text-fg/55">Recording… speak now (max 60s)</span>
+                    <button
+                      onClick={stopRecording}
+                      className="ml-auto flex items-center gap-1.5 rounded-full bg-flag-red px-3.5 py-1.5 text-xs font-bold text-cream hover:bg-[#a80d1e] transition-colors cursor-pointer"
+                    >
+                      <Square size={12} className="fill-cream" /> Stop
+                    </button>
+                  </div>
+                ) : null}
                 <div className="flex items-center gap-2">
-                  <input
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && submitMessage()}
-                    placeholder={me ? `Message #${activeRoom.name.toLowerCase()}…` : "Sign in to join the conversation…"}
-                    className="flex-1 rounded-full border border-fg/12 bg-soft/50 px-4 py-2.5 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15"
-                  />
-                  <Button variant="dark" className="rounded-full p-3" onClick={submitMessage} disabled={sendMessage.isPending}>
+                  <div className="relative flex-1">
+                    <input
+                      ref={composerRef}
+                      value={text}
+                      onChange={handleComposerChange}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !mentionQuery) submitMessage();
+                        if (e.key === "Escape") setMentionQuery(null);
+                      }}
+                      placeholder={me ? `Message #${activeRoom.name.toLowerCase()}… (@ to mention)` : "Sign in to join the conversation…"}
+                      className="w-full rounded-full border border-fg/12 bg-soft/50 px-4 py-2.5 pr-10 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15"
+                    />
+                    {mentionQuery !== null && (
+                      <div className="absolute bottom-full left-0 z-20 mb-2 w-full overflow-hidden rounded-2xl border border-fg/10 bg-card shadow-2xl animate-fade-up">
+                        {mentionResults.length === 0 ? (
+                          <p className="px-4 py-3 text-[12px] text-fg/45">No members found…</p>
+                        ) : (
+                          mentionResults.map((r) => (
+                            <button
+                              key={r.id}
+                              onClick={() => pickMention(r)}
+                              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-semibold hover:bg-soft cursor-pointer"
+                            >
+                              <Avatar name={r.name} size={24} /> {r.name}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {supportsAudio && !audioData && !recording && (
+                    <button
+                      onClick={startRecording}
+                      className="rounded-full p-2.5 text-fg/45 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+                      title="Record a voice message"
+                    >
+                      <Mic size={17} />
+                    </button>
+                  )}
+                  <Button
+                    variant="dark"
+                    className="rounded-full p-3"
+                    onClick={submitMessage}
+                    disabled={sendMessage.isPending || (!text.trim() && !audioData)}
+                  >
                     {sendMessage.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                   </Button>
                 </div>
@@ -265,6 +601,7 @@ export function Community() {
                   threadId={t.id}
                   title={t.title}
                   body={t.body}
+                  authorId={t.authorId}
                   authorName={t.authorName}
                   authorPoints={(t as any).authorPoints ?? 0}
                   authorRole={(t as any).authorRole ?? "member"}
@@ -272,11 +609,13 @@ export function Community() {
                   likes={t.likes}
                   replyCount={t.replyCount}
                   liked={me ? t.likedBy.includes(me.id) : false}
+                  isMine={me ? t.authorId === me.id : false}
                   canModerate={
                     !!me &&
                     (me.role === "admin" ||
                       (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
                   }
+                  meId={me?.id ?? ""}
                   onLike={() => {
                     if (!me) return toast("Sign in to like", "error");
                     likeThread.mutate({ memberId: me.id, threadId: t.id });
@@ -285,9 +624,21 @@ export function Community() {
                     if (!me) return toast("Sign in to reply", "error");
                     replyToThread.mutate({ memberId: me.id, threadId: t.id, text });
                   }}
-                  onDelete={() => {
+                  onEditThread={(title, body) => {
+                    if (!me) return;
+                    editThread.mutate({ memberId: me.id, threadId: t.id, title, body });
+                  }}
+                  onDeleteThread={() => {
                     if (!me) return;
                     deleteThread.mutate({ memberId: me.id, threadId: t.id });
+                  }}
+                  onEditReply={(replyId, text) => {
+                    if (!me) return;
+                    editReply.mutate({ memberId: me.id, replyId, text });
+                  }}
+                  onDeleteReply={(replyId) => {
+                    if (!me) return;
+                    deleteReply.mutate({ memberId: me.id, replyId });
                   }}
                   onReport={() => setReportTarget({ type: "thread", label: t.title })}
                 />
@@ -329,8 +680,274 @@ export function Community() {
           </Button>
         </div>
       </Modal>
+
+      {/* Private messages */}
+      <DmModal open={dmOpen} onClose={() => setDmOpen(false)} initialTarget={dmTarget} />
     </div>
   );
+}
+
+// ---------- Single chat message with reactions + actions ----------
+
+function ChatMessage({
+  m,
+  me,
+  depth,
+  parentName,
+  followed,
+  canModerate,
+  onReact,
+  onReply,
+  onSave,
+  onShare,
+  onFollow,
+  onDm,
+  onEdit,
+  onDelete,
+  editing,
+  editText,
+  onEditTextChange,
+  onEditSave,
+  onEditCancel,
+  confirmingDelete,
+  onReport,
+}: {
+  m: ChatMsg;
+  me: PublicMember | null;
+  depth: number;
+  parentName: string | null;
+  followed: boolean;
+  canModerate: boolean;
+  onReact: (type: ReactionType) => void;
+  onReply: () => void;
+  onSave: () => void;
+  onShare: () => void;
+  onFollow: () => void;
+  onDm: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  editing: boolean;
+  editText: string;
+  onEditTextChange: (t: string) => void;
+  onEditSave: () => void;
+  onEditCancel: () => void;
+  confirmingDelete: boolean;
+  onReport: () => void;
+}) {
+  const mine = m.authorId === me?.id;
+  const reactions = m.reactions ?? {};
+  const saved = (m.savedBy ?? []).includes(me?.id ?? "");
+  const hasReactions = Object.keys(reactions).length > 0;
+  const indent = Math.min(depth, 2) * 44;
+  const deleted = m.deleted;
+
+  return (
+    <div className={cn("group", mine && "flex flex-col items-end")} style={{ marginLeft: mine ? 0 : indent }}>
+      <div className={cn("flex gap-3", mine && "flex-row-reverse")}>
+        <Avatar name={m.authorName} size={34} />
+        <div className={cn("max-w-[78%] sm:max-w-[70%]", mine && "text-right")}>
+          <div className={cn("mb-1 flex items-center gap-2 flex-wrap", mine && "justify-end")}>
+            <span className="text-[12px] font-bold">{m.authorName}</span>
+            <RankChip points={m.authorPoints} role={m.authorRole} />
+            <span className="text-[10px] text-fg/40">
+              {regionName(m.authorRegion)} · {timeAgo(m.createdAt)}
+              {m.editedAt && !deleted && <span className="ml-1 italic text-fg/30">· edited</span>}
+            </span>
+          </div>
+
+          {parentName && !deleted && (
+            <p className={cn("mb-1 flex items-center gap-1 text-[11px] font-semibold text-flag-red/70", mine && "justify-end")}>
+              <CornerDownRight size={11} /> in reply to {parentName}
+            </p>
+          )}
+
+          {deleted ? (
+            <div
+              className={cn(
+                "inline-block rounded-2xl px-4 py-2.5 text-left text-[13px] italic leading-relaxed text-fg/40",
+                mine ? "bg-ink/60 rounded-br-sm" : "bg-soft/60 border border-dashed border-fg/15 rounded-bl-sm",
+              )}
+            >
+              This message was deleted
+            </div>
+          ) : editing ? (
+            <div className={cn("space-y-2", mine && "flex flex-col items-end")}>
+              <textarea
+                value={editText}
+                onChange={(e) => onEditTextChange(e.target.value)}
+                autoFocus
+                rows={2}
+                className="w-full rounded-2xl border border-flag-gold/50 bg-card px-4 py-2.5 text-sm outline-none focus:border-flag-gold focus:ring-2 focus:ring-flag-gold/20"
+              />
+              <div className="flex items-center gap-2">
+                <Button variant="dark" className="rounded-full px-4 py-1.5 text-xs" onClick={onEditSave}>
+                  Save
+                </Button>
+                <Button variant="ghost" className="rounded-full px-4 py-1.5 text-xs" onClick={onEditCancel}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-relaxed",
+                mine ? "bg-ink text-cream rounded-br-sm" : "bg-card border border-fg/5 rounded-bl-sm",
+              )}
+            >
+              {m.audio && (
+                <audio
+                  controls
+                  src={m.audio}
+                  preload="none"
+                  className="mb-1.5 h-10 w-56 max-w-full rounded-xl sm:w-64"
+                />
+              )}
+              {m.text && <MentionText text={m.text} mentions={m.mentions ?? []} />}
+            </div>
+          )}
+
+          {/* Reactions + actions */}
+          {!deleted && (
+            <div className={cn("mt-1.5 flex flex-wrap items-center gap-1", mine && "justify-end")}>
+              {REACTIONS.map((r) => {
+                const ids = reactions[r.type] ?? [];
+                const count = ids.length;
+                const reacted = ids.includes(me?.id ?? "");
+                if (count === 0 && !reacted) {
+                  return (
+                    <button
+                      key={r.type}
+                      onClick={() => onReact(r.type)}
+                      title={r.label}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-[13px] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ink/5 cursor-pointer"
+                    >
+                      {r.emoji}
+                    </button>
+                  );
+                }
+                return (
+                  <button
+                    key={r.type}
+                    onClick={() => onReact(r.type)}
+                    title={`${r.label}${count > 0 ? ` — ${ids.length} ${ids.length === 1 ? "person" : "people"}` : ""}`}
+                    className={cn(
+                      "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-semibold transition-colors cursor-pointer",
+                      reacted
+                        ? "border-flag-gold bg-flag-gold/20 text-fg"
+                        : "border-fg/10 bg-card text-fg/60 hover:border-flag-gold/60",
+                    )}
+                  >
+                    <span>{r.emoji}</span>
+                    {count > 0 && <span>{count}</span>}
+                  </button>
+                );
+              })}
+
+              <span className={cn("mx-0.5 hidden h-4 w-px bg-fg/10 sm:block", !hasReactions && "sm:hidden")} />
+
+              <ActionBtn title="Reply" onClick={onReply}>
+                <Reply size={13} />
+              </ActionBtn>
+              <ActionBtn title={saved ? "Remove bookmark" : "Save message"} onClick={onSave} active={saved}>
+                <Bookmark size={13} className={saved ? "fill-flag-red text-flag-red" : ""} />
+              </ActionBtn>
+              <ActionBtn title="Share" onClick={onShare}>
+                <Share2 size={13} />
+              </ActionBtn>
+              {mine && (
+                <ActionBtn title="Edit message" onClick={onEdit}>
+                  <Pencil size={13} />
+                </ActionBtn>
+              )}
+              {mine && (
+                <ActionBtn
+                  title={confirmingDelete ? "Tap again to confirm delete" : "Delete message"}
+                  onClick={onDelete}
+                  danger
+                >
+                  <Trash2 size={13} className={confirmingDelete ? "text-flag-red" : ""} />
+                </ActionBtn>
+              )}
+              {!mine && (
+                <ActionBtn title={followed ? "Unfollow" : "Follow"} onClick={onFollow} active={followed}>
+                  {followed ? <UserCheck size={13} /> : <UserPlus size={13} />}
+                </ActionBtn>
+              )}
+              {!mine && (
+                <ActionBtn title="Private message" onClick={onDm}>
+                  <MessageCircle size={13} />
+                </ActionBtn>
+              )}
+              {!mine && (
+                <ActionBtn title="Report" onClick={onReport} danger>
+                  <Flag size={13} />
+                </ActionBtn>
+              )}
+              {canModerate && !mine && (
+                <ActionBtn title="Delete (moderator)" onClick={onDelete} danger>
+                  <Trash2 size={13} />
+                </ActionBtn>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionBtn({
+  children,
+  title,
+  onClick,
+  active,
+  danger,
+}: {
+  children: React.ReactNode;
+  title: string;
+  onClick: () => void;
+  active?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className={cn(
+        "flex h-7 w-7 items-center justify-center rounded-full text-fg/40 transition-colors cursor-pointer",
+        active ? "text-flag-green" : danger ? "hover:text-flag-red hover:bg-flag-red/5" : "hover:text-fg hover:bg-ink/5",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Renders @mentions in gold — highlights the names the sender tagged
+function MentionText({
+  text,
+  mentions,
+}: {
+  text: string;
+  mentions: Array<{ id: string; name: string }>;
+}) {
+  if (!mentions || mentions.length === 0) return <>{text}</>;
+  const parts: React.ReactNode[] = [];
+  let rest = text;
+  for (const m of mentions) {
+    const idx = rest.toLowerCase().indexOf(`@${m.name.toLowerCase()}`);
+    if (idx === -1) continue;
+    parts.push(rest.slice(0, idx));
+    parts.push(
+      <span key={m.id} className="font-bold text-flag-red">
+        @{m.name}
+      </span>,
+    );
+    rest = rest.slice(idx + m.name.length + 1);
+  }
+  parts.push(rest);
+  return <>{parts}</>;
 }
 
 function ForumComposer({
@@ -391,6 +1008,7 @@ function ForumThread({
   threadId,
   title,
   body,
+  authorId,
   authorName,
   authorPoints,
   authorRole,
@@ -398,15 +1016,21 @@ function ForumThread({
   likes,
   replyCount,
   liked,
+  isMine,
   canModerate,
+  meId,
   onLike,
   onReply,
-  onDelete,
+  onEditThread,
+  onDeleteThread,
+  onEditReply,
+  onDeleteReply,
   onReport,
 }: {
   threadId: string;
   title: string;
   body: string;
+  authorId: string;
   authorName: string;
   authorPoints: number;
   authorRole: string;
@@ -414,14 +1038,26 @@ function ForumThread({
   likes: number;
   replyCount: number;
   liked: boolean;
+  isMine: boolean;
   canModerate: boolean;
+  meId: string;
   onLike: () => void;
   onReply: (text: string) => void;
-  onDelete: () => void;
+  onEditThread: (title: string, body: string) => void;
+  onDeleteThread: () => void;
+  onEditReply: (replyId: string, text: string) => void;
+  onDeleteReply: (replyId: string) => void;
   onReport: () => void;
 }) {
   const [openReplies, setOpenReplies] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(title);
+  const [editBody, setEditBody] = useState(body);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [editReplyText, setEditReplyText] = useState("");
+  const [confirmReplyDelete, setConfirmReplyDelete] = useState<string | null>(null);
 
   const { data } = useQuery(
     queryClient.community.getThread.queryOptions({
@@ -440,27 +1076,93 @@ function ForumThread({
               <p className="text-sm font-bold">{authorName}</p>
               <RankChip points={authorPoints} role={authorRole} />
             </div>
-            <p className="text-[11px] text-fg/40">{timeAgo(createdAt)}</p>
+            <p className="text-[11px] text-fg/40">
+              {timeAgo(createdAt)}
+              {data?.thread.editedAt && <span className="ml-1 italic text-fg/30">· edited</span>}
+            </p>
           </div>
-          {canModerate && (
+          <div className="ml-auto flex items-center gap-1">
+            {isMine && (
+              <button
+                onClick={() => {
+                  if (editing) {
+                    setEditing(false);
+                    setEditTitle(title);
+                    setEditBody(body);
+                  } else {
+                    setEditing(true);
+                    setEditTitle(title);
+                    setEditBody(body);
+                  }
+                }}
+                className="rounded-full p-2 text-fg/30 hover:text-flag-green hover:bg-flag-green/5 cursor-pointer"
+                title={editing ? "Cancel edit" : "Edit discussion"}
+              >
+                <Pencil size={15} />
+              </button>
+            )}
+            {(isMine || canModerate) && (
+              <button
+                onClick={() => {
+                  if (confirmDelete) onDeleteThread();
+                  else {
+                    setConfirmDelete(true);
+                    setTimeout(() => setConfirmDelete(false), 3000);
+                  }
+                }}
+                className="rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+                title={confirmDelete ? "Tap again to confirm delete" : "Delete discussion"}
+              >
+                <Trash2 size={15} className={confirmDelete ? "text-flag-red" : ""} />
+              </button>
+            )}
             <button
-              onClick={onDelete}
-              className="ml-auto rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
-              title="Delete discussion (moderator)"
+              onClick={onReport}
+              className="rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+              title="Report"
             >
-              <Trash2 size={15} />
+              <Flag size={15} />
             </button>
-          )}
-          <button
-            onClick={onReport}
-            className="rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
-            title="Report"
-          >
-            <Flag size={15} />
-          </button>
+          </div>
         </div>
-        <h3 className="font-display text-xl font-bold leading-snug">{title}</h3>
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-fg/70">{body}</p>
+
+        {editing ? (
+          <div className="space-y-3">
+            <input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="w-full rounded-xl border border-flag-gold/50 bg-card px-4 py-2.5 text-sm font-semibold outline-none focus:border-flag-gold focus:ring-2 focus:ring-flag-gold/15"
+            />
+            <textarea
+              value={editBody}
+              onChange={(e) => setEditBody(e.target.value)}
+              rows={4}
+              className="w-full rounded-xl border border-flag-gold/50 bg-card px-4 py-3 text-sm outline-none focus:border-flag-gold focus:ring-2 focus:ring-flag-gold/15"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="dark"
+                className="rounded-full px-4 py-1.5 text-xs"
+                onClick={() => {
+                  if (editTitle.trim().length < 3 || editBody.trim().length < 3) return;
+                  onEditThread(editTitle.trim(), editBody.trim());
+                  setEditing(false);
+                }}
+              >
+                Save changes
+              </Button>
+              <Button variant="ghost" className="rounded-full px-4 py-1.5 text-xs" onClick={() => { setEditing(false); setEditTitle(title); setEditBody(body); }}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h3 className="font-display text-xl font-bold leading-snug">{title}</h3>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-fg/70">{body}</p>
+          </>
+        )}
+
         <div className="mt-4 flex items-center gap-4">
           <button
             onClick={onLike}
@@ -482,15 +1184,81 @@ function ForumThread({
       {openReplies && (
         <div className="border-t border-fg/8 bg-soft/30 px-6 py-4">
           <div className="space-y-3">
-            {data?.replies.map((r) => (
-              <div key={r.id} className="flex gap-3">
-                <Avatar name={r.authorName} size={30} />
-                <div className="rounded-2xl bg-card px-4 py-2.5 text-sm border border-fg/5">
-                  <p className="text-[12px] font-bold">{r.authorName} <span className="ml-1 font-normal text-fg/35">{timeAgo(r.createdAt)}</span></p>
-                  <p className="mt-0.5 leading-relaxed text-fg/75">{r.text}</p>
+            {data?.replies.map((r) => {
+              const replyMine = r.authorId === meId;
+              if (r.deleted) {
+                return (
+                  <div key={r.id} className="flex gap-3">
+                    <Avatar name={r.authorName} size={30} />
+                    <div className="rounded-2xl bg-soft/60 border border-dashed border-fg/15 px-4 py-2.5 text-[13px] italic text-fg/40">
+                      This reply was deleted
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div key={r.id} className="flex gap-3">
+                  <Avatar name={r.authorName} size={30} />
+                  <div className="flex-1">
+                    <div className="rounded-2xl bg-card px-4 py-2.5 text-sm border border-fg/5">
+                      <p className="text-[12px] font-bold">
+                        {r.authorName}{" "}
+                        <span className="ml-1 font-normal text-fg/35">
+                          {timeAgo(r.createdAt)}
+                          {r.editedAt && <span className="ml-1 italic">· edited</span>}
+                        </span>
+                      </p>
+                      {editingReplyId === r.id ? (
+                        <div className="mt-2 space-y-2">
+                          <textarea
+                            value={editReplyText}
+                            onChange={(e) => setEditReplyText(e.target.value)}
+                            rows={2}
+                            className="w-full rounded-xl border border-flag-gold/50 bg-card px-3 py-2 text-sm outline-none focus:border-flag-gold"
+                          />
+                          <div className="flex gap-2">
+                            <Button variant="dark" className="rounded-full px-3 py-1 text-xs" onClick={() => { if (editReplyText.trim()) { onEditReply(r.id, editReplyText.trim()); setEditingReplyId(null); } }}>
+                              Save
+                            </Button>
+                            <Button variant="ghost" className="rounded-full px-3 py-1 text-xs" onClick={() => setEditingReplyId(null)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-0.5 leading-relaxed text-fg/75">{r.text}</p>
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1 pl-1">
+                      {replyMine && (
+                        <button
+                          onClick={() => { setEditingReplyId(r.id); setEditReplyText(r.text); }}
+                          className="rounded-full p-1.5 text-fg/30 hover:text-flag-green hover:bg-flag-green/5 cursor-pointer"
+                          title="Edit reply"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      )}
+                      {(replyMine || canModerate) && (
+                        <button
+                          onClick={() => {
+                            if (confirmReplyDelete === r.id) onDeleteReply(r.id);
+                            else {
+                              setConfirmReplyDelete(r.id);
+                              setTimeout(() => setConfirmReplyDelete((cur) => (cur === r.id ? null : cur)), 3000);
+                            }
+                          }}
+                          className="rounded-full p-1.5 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+                          title={confirmReplyDelete === r.id ? "Tap again to confirm delete" : "Delete reply"}
+                        >
+                          <Trash2 size={12} className={confirmReplyDelete === r.id ? "text-flag-red" : ""} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="mt-4 flex gap-2">
             <input

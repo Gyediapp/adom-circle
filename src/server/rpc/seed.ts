@@ -38,6 +38,10 @@ type MemberSeed = Omit<
   | "verifyExpires"
   | "resetToken"
   | "resetExpires"
+  | "following"
+  | "followerCount"
+  | "savedMessages"
+  | "status"
 >;
 
 const members: MemberSeed[] = [
@@ -270,7 +274,7 @@ const rooms: Room[] = [
   { id: "room-projects", name: "Projects & Volunteering", description: "Coordinate volunteer hours, resources and project teams.", icon: "🤝", color: "#15803D", pinned: false, createdAt: now(365) },
 ];
 
-const messages: Message[] = [
+const messages: Array<Omit<Message, "replyToId" | "reactions" | "savedBy" | "editedAt" | "deleted" | "mentions" | "audio">> = [
   { id: randomUUID(), roomId: "room-general", authorId: "admin-ama", authorName: "Ama Owusu", authorRegion: "greater-accra", text: "Medase for joining Adom Circle! Introduce yourself — tell us where you're from and what you love about Ghana. 🇬🇭", createdAt: now(10, 5) },
   { id: randomUUID(), roomId: "room-general", authorId: "m-kofi", authorName: "Kofi Mensah", authorRegion: "ashanti", text: "Kumasi here! Teacher by profession, youth mentor by calling. Happy to connect anyone with volunteering opportunities in Ashanti.", createdAt: now(10, 3) },
   { id: randomUUID(), roomId: "room-general", authorId: "m-yaw", authorName: "Yaw Adjei", authorRegion: "greater-accra", text: "From Toronto but Nsawam at heart. Looking to mentor young developers back home — the talent is unreal.", createdAt: now(9, 20) },
@@ -285,7 +289,7 @@ const messages: Message[] = [
   { id: randomUUID(), roomId: "room-values", authorId: "m-sena", authorName: "Sena Dogbe", authorRegion: "northern", text: "Peace is a gift we must protect. Faith and respect for one another go hand in hand.", createdAt: now(2, 2) },
 ];
 
-const threads: Thread[] = [
+const threads: Array<Omit<Thread, "editedAt">> = [
   {
     id: randomUUID(), roomId: "room-civic", title: "Why the Constitution must stay above every institution",
     body: "Our peace and stability rest on one simple idea: the Constitution of Ghana is supreme. No denomination, institution or group stands above it. Let's discuss how we teach this in our churches, mosques, families and communities — with respect for everyone's faith.",
@@ -323,7 +327,7 @@ const threads: Thread[] = [
   },
 ];
 
-const replies: Reply[] = [
+const replies: Array<Omit<Reply, "editedAt" | "deleted">> = [
   { id: randomUUID(), threadId: threads[0].id, authorId: "m-fifi", authorName: "Fifi Tetteh", text: "We should create simple posters explaining the supremacy clause and share them in every community. Education is everything.", createdAt: now(11, 20) },
   { id: randomUUID(), threadId: threads[0].id, authorId: "m-kofi", authorName: "Kofi Mensah", text: "Agreed. I've started a monthly civic class at my church in Kumasi — open to all faiths, focused on the Constitution.", createdAt: now(11, 2) },
   { id: randomUUID(), threadId: threads[2].id, authorId: "m-akua", authorName: "Akua Boateng", text: "Count me in! Logging my clinic hours weekly. 14 hours this month so far.", createdAt: now(6, 10) },
@@ -497,6 +501,10 @@ export async function seed() {
         verifyExpires: null,
         resetToken: null,
         resetExpires: null,
+        following: [],
+        followerCount: 0,
+        savedMessages: [],
+        status: "active",
       });
     }
   }
@@ -504,9 +512,21 @@ export async function seed() {
     for (const r of rooms) await roomKV.setItem(r.id, r);
   }
   if (threadCount.length === 0) {
-    for (const t of threads) await threadKV.setItem(t.id, t);
-    for (const r of replies) await replyKV.setItem(r.id, r);
-    for (const m of messages) await messageKV.setItem(m.id, m);
+    for (const t of threads)
+      await threadKV.setItem(t.id, { ...t, editedAt: null });
+    for (const r of replies)
+      await replyKV.setItem(r.id, { ...r, editedAt: null, deleted: false });
+    for (const m of messages)
+      await messageKV.setItem(m.id, {
+        ...m,
+        replyToId: null,
+        reactions: {},
+        savedBy: [],
+        editedAt: null,
+        deleted: false,
+        mentions: [],
+        audio: null,
+      });
     for (const r of reports) await reportKV.setItem(r.id, r);
   }
   if (projectCount.length === 0) {

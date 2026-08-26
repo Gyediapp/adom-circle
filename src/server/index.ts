@@ -68,6 +68,105 @@ app.get("/sw.js", (c) =>
   }),
 );
 
+// robots.txt — let search engines crawl everything and point at the sitemap
+app.get("/robots.txt", (c) =>
+  c.text(
+    `User-agent: *\nAllow: /\n\nSitemap: https://adomcircle.org/sitemap.xml\n`,
+    200,
+    { "Content-Type": "text/plain" },
+  ),
+);
+
+// sitemap.xml — the main public pages (the SPA also serves clean URLs like /community)
+app.get("/sitemap.xml", (c) => {
+  const pages = [
+    { loc: "/", freq: "daily", prio: "1.0" },
+    { loc: "/community", freq: "daily", prio: "0.9" },
+    { loc: "/projects", freq: "weekly", prio: "0.8" },
+    { loc: "/events", freq: "weekly", prio: "0.8" },
+    { loc: "/civic", freq: "weekly", prio: "0.7" },
+    { loc: "/economy", freq: "weekly", prio: "0.7" },
+    { loc: "/about", freq: "monthly", prio: "0.6" },
+  ];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${pages
+  .map(
+    (p) => `  <url>
+    <loc>https://adomcircle.org${p.loc}</loc>
+    <changefreq>${p.freq}</changefreq>
+    <priority>${p.prio}</priority>
+  </url>`,
+  )
+  .join("\n")}
+</urlset>`;
+  return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
+});
+
+// RSS feed of recent community activity — lets anyone (or any tool/bot)
+// subscribe to hot conversations without needing platform APIs.
+app.get("/feed.xml", async (c) => {
+  const { threadKV } = await import("./rpc/community");
+  const { postKV } = await import("./rpc/site");
+  const { eventKV } = await import("./rpc/events");
+  const esc = (s: string) =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  const [threads, posts, events] = await Promise.all([
+    threadKV.getAllItems(),
+    postKV.getAllItems(),
+    eventKV.getAllItems(),
+  ]);
+
+  const items = [
+    ...threads.map((t) => ({
+      title: t.title,
+      link: "https://adomcircle.org/#/community",
+      desc: `${t.body.slice(0, 280)}… — ${t.authorName}`,
+      date: t.createdAt,
+    })),
+    ...posts.map((p) => ({
+      title: p.title,
+      link: "https://adomcircle.org/#/",
+      desc: p.body.slice(0, 280),
+      date: p.createdAt,
+    })),
+    ...events.map((e) => ({
+      title: `Event: ${e.title}`,
+      link: "https://adomcircle.org/#/events",
+      desc: `${e.date.slice(0, 10)} · ${e.location} — ${e.description.slice(0, 220)}`,
+      date: e.createdAt,
+    })),
+  ]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 30);
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+<title>Adom Circle — One Circle. One Ghana.</title>
+<link>https://adomcircle.org</link>
+<description>Hot conversations, stories and events from Ghana's circle of values, civic duty &amp; progress.</description>
+<atom:link href="https://adomcircle.org/feed.xml" rel="self" type="application/rss+xml"/>
+${items
+  .map(
+    (i) => `<item>
+<title>${esc(i.title)}</title>
+<link>${i.link}</link>
+<description>${esc(i.desc)}</description>
+<pubDate>${new Date(i.date).toUTCString()}</pubDate>
+</item>`,
+  )
+  .join("\n")}
+</channel>
+</rss>`;
+  return c.text(xml, 200, { "Content-Type": "application/rss+xml; charset=utf-8" });
+});
+
 // Production: serve the hashed client bundle from ./dist
 if (process.env.NODE_ENV === "production") {
   app.use("/assets/*", serveStatic({ root: "./dist" }));

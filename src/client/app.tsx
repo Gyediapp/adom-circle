@@ -29,14 +29,16 @@ const VALID_TABS: Tab[] = [
   "admin",
 ];
 
-// Read the page from the URL hash: "#/events" → "events", "" → "home"
-function tabFromHash(): Tab {
+// Read the page from the URL: "/community" or "#/community" → "community"
+function tabFromURL(): Tab {
+  const path = window.location.pathname.replace(/^\/+/, "").split("/")[0].toLowerCase();
   const h = window.location.hash.replace(/^#\/?/, "").toLowerCase();
-  return (VALID_TABS as string[]).includes(h) ? (h as Tab) : "home";
+  const candidate = h || path;
+  return (VALID_TABS as string[]).includes(candidate) ? (candidate as Tab) : "home";
 }
 
 function Shell() {
-  const [tab, setTabState] = useState<Tab>(tabFromHash);
+  const [tab, setTabState] = useState<Tab>(tabFromURL);
   const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
   const { user, loading, toasts, toast } = useStore();
   const { t } = useI18n();
@@ -53,21 +55,29 @@ function Shell() {
 
   const onAuth = (m: "login" | "signup") => setAuthMode(m);
 
-  // Navigate + update the URL so each page has its own address (#/events, etc.)
+  // Navigate + update the URL so each page has its own clean address (/events)
   const onTab = useCallback((t: Tab) => {
     setTabState(t);
-    const target = t === "home" ? "" : `/${t}`;
-    const want = target ? `#${target}` : "";
-    if (window.location.hash !== want) {
-      window.location.hash = target;
+    const target = t === "home" ? "/" : `/${t}`;
+    if (window.location.pathname !== target) {
+      window.history.pushState(null, "", target);
+    }
+    // Normalise legacy #/hash links away
+    if (window.location.hash) {
+      window.history.replaceState(null, "", target);
     }
   }, []);
 
-  // Support the browser back/forward buttons
+  // Support the browser back/forward buttons + legacy hash links
   useEffect(() => {
-    const onHash = () => setTabState(tabFromHash());
+    const onPop = () => setTabState(tabFromURL());
+    const onHash = () => setTabState(tabFromURL());
+    window.addEventListener("popstate", onPop);
     window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("hashchange", onHash);
+    };
   }, []);
 
   // Dark hero pages: transparent navbar with light text until scrolled

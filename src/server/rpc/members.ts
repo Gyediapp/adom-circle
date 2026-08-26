@@ -31,10 +31,25 @@ export const MemberSchema = z.object({
   resetToken: z.string().nullable(),
   resetExpires: z.string().nullable(),
   joinedAt: z.string(),
+  following: z.array(z.string()),
+  followerCount: z.number(),
+  savedMessages: z.array(z.string()),
+  status: z.enum(["active", "suspended"]),
 });
 
 export type Member = z.output<typeof MemberSchema>;
 export type MemberRole = Member["role"];
+
+// Stored members created before these fields existed — fill safe defaults
+export function normalizeMember(m: Member): Member {
+  return {
+    ...m,
+    following: m.following ?? [],
+    followerCount: m.followerCount ?? 0,
+    savedMessages: m.savedMessages ?? [],
+    status: m.status ?? "active",
+  };
+}
 
 // The public face of a member — never exposes password or token material
 export type PublicMember = Omit<
@@ -194,7 +209,11 @@ export async function requireAdmin(adminId: string): Promise<Member> {
 export async function requireMember(memberId: string): Promise<Member> {
   const member = await memberKV.getItem(memberId);
   if (!member) throw new Error("Member not found. Please sign in.");
-  return member;
+  const m = normalizeMember(member);
+  if (m.status === "suspended") {
+    throw new Error("Your account has been suspended. Contact the administrators.");
+  }
+  return m;
 }
 
 // Delegated moderation: admins OR moderators managing the target room.
@@ -272,6 +291,10 @@ export const members = {
         resetToken: null,
         resetExpires: null,
         joinedAt: new Date().toISOString(),
+        following: [],
+        followerCount: 0,
+        savedMessages: [],
+        status: "active",
       };
       await memberKV.setItem(member.id, member);
       await sendEmail({
@@ -297,9 +320,14 @@ export const members = {
         await recordAttempt(key);
         throw new Error("Incorrect email or password.");
       }
+      const foundNorm = normalizeMember(found);
+      if (foundNorm.status === "suspended") {
+        await recordAttempt(key);
+        throw new Error("This account has been suspended. Contact the administrators.");
+      }
       await clearAttempts(key);
       const token = await createSession(found.id);
-      return { member: sanitizeMember(found), token };
+      return { member: sanitizeMember(foundNorm), token };
     }),
 
   me: os.input(z.object({ token: z.string() })).handler(async ({ input }) => {
@@ -447,8 +475,50 @@ export const members = {
 
   byId: os.input(z.string()).handler(async ({ input }) => {
     const m = await memberKV.getItem(input);
-    return m ? sanitizeMember(m) : null;
+    return m ? sanitizeMember(normalizeMember(m)) : null;
   }),
+
+  search: os
+    .input(z.object({ q: z.string().min(1).max(50) }))
+    .handler(async ({ input }) => {
+      const q = input.q.toLowerCase();
+      const all = await memberKV.getAllItems();
+      return all
+        .filter((m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
+        .slice(0, 8)
+        .map((m) => ({ id: m.id, name: m.name }));
+    }),
+
+  follow: os
+    .input(z.object({ memberId: z.string(), targetId: z.string() }))
+    .handler(async ({ input }) => {
+      const me = await requireMember(input.memberId);
+      if (me.id === input.targetId) throw new Error("You can't follow yourself");
+      const target = await memberKV.getItem(input.targetId);
+      if (!target) throw new Error("Member not found");
+      const following = me.following.includes(target.id);
+      const meUpdated: Member = {
+        ...me,
+        following: following
+          ? me.following.filter((id) => id !== target.id)
+          : [...me.following, target.id],
+      };
+      await memberKV.setItem(me.id, meUpdated);
+      const targetUpdated: Member = {
+        ...normalizeMember(target),
+        followerCount: Math.max(0, target.followerCount + (following ? -1 : 1)),
+      };
+      await memberKV.setItem(target.id, targetUpdated);
+      if (!following) {
+        await notify(
+          target.id,
+          "system",
+          `${me.name} started following you`,
+          "They'll see your activity in the community.",
+        ).catch(() => {});
+      }
+      return sanitizeMember(meUpdated);
+    }),
 
   update: os
     .input(
@@ -553,7 +623,122 @@ export const members = {
   remove: os
     .input(z.object({ adminId: z.string(), memberId: z.string() }))
     .handler(async ({ input }) => {
-      await requireAdmin(input.adminId);
+      const admin = await requireAdmin(input.adminId);
+      if (admin.id === input.memberId) {
+        throw new Error("You can't delete your own account from here.");
+      }
+      const member = await memberKV.getItem(input.memberId);
+      if (!member) throw new Error("Member not found");
+      // Remove the account
       await memberKV.removeItem(input.memberId);
+      // Remove sessions
+      const sessionKeys = await sessionKV.getKeys();
+      const sessions = await sessionKV.getItems(sessionKeys);
+      for (const { key, value } of sessions) {
+        if (value.memberId === input.memberId) await sessionKV.removeItem(key);
+      }
+      // Remove notifications
+      const { notificationKV } = await import("./notifications");
+      for (const n of await notificationKV.getAllItems()) {
+        if (n.memberId === input.memberId) await notificationKV.removeItem(n.id);
+      }
+      // Remove DMs (both directions)
+      const { dmConvoKV, dmMessageKV } = await import("./dms");
+      for (const c of await dmConvoKV.getAllItems()) {
+        if (c.memberIds.includes(input.memberId)) {
+          for (const msg of await dmMessageKV.getAllItems()) {
+            if (msg.convoId === c.id) await dmMessageKV.removeItem(msg.id);
+          }
+          await dmConvoKV.removeItem(c.id);
+        }
+      }
+      // Soft-delete their room messages (keeps threads readable, anonymises author)
+      const { messageKV: msgKV } = await import("./community");
+      for (const msg of await msgKV.getAllItems()) {
+        if (msg.authorId === input.memberId) {
+          await msgKV.setItem(msg.id, {
+            ...msg,
+            text: "",
+            deleted: true,
+            reactions: {},
+            savedBy: [],
+          });
+        }
+      }
+      return { ok: true };
+    }),
+
+  adminUpdateMember: os
+    .input(
+      z.object({
+        adminId: z.string(),
+        memberId: z.string(),
+        patch: z.object({
+          name: z.string().min(1).optional(),
+          email: z.string().email().optional(),
+          phone: z.string().nullable().optional(),
+          region: z.string().optional(),
+          hometown: z.string().optional(),
+          diasporaCountry: z.string().optional(),
+          church: z.string().optional(),
+          profession: z.string().optional(),
+          bio: z.string().optional(),
+          badges: z.array(z.string()).optional(),
+        }),
+      }),
+    )
+    .handler(async ({ input }) => {
+      await requireAdmin(input.adminId);
+      const member = await memberKV.getItem(input.memberId);
+      if (!member) throw new Error("Member not found");
+      // Prevent email collisions
+      if (input.patch.email) {
+        const all = await memberKV.getAllItems();
+        const clash = all.find(
+          (m) =>
+            m.id !== input.memberId &&
+            m.email.toLowerCase() === input.patch.email!.toLowerCase(),
+        );
+        if (clash) throw new Error("Another member already uses that email");
+      }
+      const updated = { ...normalizeMember(member), ...input.patch };
+      await memberKV.setItem(updated.id, updated);
+      return sanitizeMember(updated);
+    }),
+
+  setStatus: os
+    .input(
+      z.object({
+        adminId: z.string(),
+        memberId: z.string(),
+        status: z.enum(["active", "suspended"]),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const admin = await requireAdmin(input.adminId);
+      if (admin.id === input.memberId) {
+        throw new Error("You can't suspend your own account.");
+      }
+      const member = await memberKV.getItem(input.memberId);
+      if (!member) throw new Error("Member not found");
+      const updated = { ...normalizeMember(member), status: input.status };
+      await memberKV.setItem(updated.id, updated);
+      // Kill active sessions when suspending
+      if (input.status === "suspended") {
+        const sessionKeys = await sessionKV.getKeys();
+        const sessions = await sessionKV.getItems(sessionKeys);
+        for (const { key, value } of sessions) {
+          if (value.memberId === input.memberId) await sessionKV.removeItem(key);
+        }
+      }
+      await notify(
+        input.memberId,
+        "system",
+        input.status === "suspended" ? "Account suspended" : "Account reactivated",
+        input.status === "suspended"
+          ? "Your account has been suspended. Contact the administrators if you believe this is a mistake."
+          : "Your account is active again. Welcome back!",
+      ).catch(() => {});
+      return sanitizeMember(updated);
     }),
 };

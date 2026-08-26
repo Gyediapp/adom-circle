@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   HeartHandshake,
@@ -17,17 +17,20 @@ import {
   Megaphone,
   Video,
   Handshake,
+  Flame,
+  Link2,
+  ThumbsUp,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { useI18n } from "@/client/lib/i18n";
 import { SocialLinks } from "./socials";
+import { Button, Card, Chip, Modal, SectionHeading, Stat, ProgressBar } from "./ui";
 import { FacebookIcon, WhatsAppIcon, YouTubeIcon, TikTokIcon } from "@/client/lib/brand-icons";
-import { Button, Card, Chip, SectionHeading, Stat, ProgressBar } from "./ui";
 import { LogoMark, Star } from "@/client/lib/logo";
-import { GHANA_REGIONS } from "@/server/data/regions";
-import { formatNumber } from "@/client/lib/format";
+import { GHANA_REGIONS, regionName, type GhanaRegion } from "@/server/data/regions";
+import { formatNumber, timeAgo } from "@/client/lib/format";
 import type { Tab } from "./navbar";
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
@@ -47,6 +50,18 @@ const QUICK_ACTIONS: Array<{ tab: Tab; label: string; icon: React.ElementType; h
   { tab: "events", label: "Events", icon: CalendarDays, hint: "Meet & RSVP" },
   { tab: "civic", label: "Civic", icon: Vote, hint: "Constitution & voting" },
   { tab: "economy", label: "Economy", icon: TrendingUp, hint: "Invest & buy Ghanaian" },
+];
+
+// Table of contents — jump-to links for the long landing page
+const TOC_ITEMS = [
+  { id: "circle", label: "The Circle" },
+  { id: "impact", label: "Impact" },
+  { id: "projects", label: "Projects" },
+  { id: "events", label: "Events" },
+  { id: "civic", label: "Civic" },
+  { id: "community", label: "Community" },
+  { id: "stories", label: "Stories" },
+  { id: "connect", label: "Connect" },
 ];
 
 // Brand cards for the "Stay connected everywhere" section — driven by admin socials
@@ -79,8 +94,56 @@ export function Home({
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
   const { data: ads } = useQuery(queryClient.events.adsPublic.queryOptions());
   const { data: events } = useQuery(queryClient.events.list.queryOptions());
+  const { data: threads } = useQuery(
+    queryClient.community.liveThreads.list.experimental_liveOptions(),
+  );
 
   const stats = settings?.stats;
+
+  // Featured events carousel
+  const [paused, setPaused] = useState(false);
+  const [region, setRegion] = useState<GhanaRegion | null>(null);
+  const carouselRef = useRef<HTMLDivElement>(null);
+
+  const featuredEvents = useMemo(
+    () =>
+      (events ?? [])
+        .filter((e) => e.featured && e.date >= new Date().toISOString())
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 6),
+    [events],
+  );
+
+  // Auto-scroll the featured carousel; pause while hovered / touched
+  useEffect(() => {
+    const el = carouselRef.current;
+    if (!el || featuredEvents.length <= 1) return;
+    const id = setInterval(() => {
+      if (paused) return;
+      const max = el.scrollWidth - el.clientWidth;
+      if (el.scrollLeft >= max - 4) el.scrollTo({ left: 0, behavior: "smooth" });
+      else el.scrollBy({ left: Math.min(340, max - el.scrollLeft), behavior: "smooth" });
+    }, 3500);
+    return () => clearInterval(id);
+  }, [paused, featuredEvents.length]);
+
+  // Hot conversations — most engaged threads from the last 14 days
+  const hotThreads = useMemo(() => {
+    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    return (threads ?? [])
+      .filter((t) => new Date(t.createdAt).getTime() >= cutoff)
+      .sort((a, b) => (b.likes + b.replyCount) - (a.likes + a.replyCount))
+      .slice(0, 3);
+  }, [threads]);
+
+  const shareThread = (title: string, authorName: string) => {
+    const text = `🔥 ${title} — ${authorName} on Adom Circle 🇬🇭 Join the discussion: https://adomcircle.org/#/community`;
+    return {
+      whatsapp: `https://wa.me/?text=${encodeURIComponent(text)}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fadomcircle.org%2F%23%2Fcommunity&quote=${encodeURIComponent(text)}`,
+      text,
+    };
+  };
 
   const heroProjects = useMemo(
     () => (projects ?? []).filter((p) => p.status !== "planned").slice(0, 4),
@@ -244,8 +307,26 @@ export function Home({
         <div className="flag-stripes h-[3px] w-full" aria-hidden />
       </div>
 
+      {/* ================= TABLE OF CONTENTS ================= */}
+      <div className="sticky top-[96px] z-30 border-b border-fg/5 bg-page/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto no-scrollbar px-4 py-3 sm:px-6">
+          <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.25em] text-fg/40">
+            Jump to
+          </span>
+          {TOC_ITEMS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="shrink-0 rounded-full border border-fg/10 bg-card px-3.5 py-1.5 text-[12px] font-semibold text-fg/60 transition-colors hover:border-flag-red hover:text-flag-red cursor-pointer"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ================= MISSION / VALUES ================= */}
-      <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+      <section id="circle" className="mx-auto max-w-7xl scroll-mt-28 px-4 py-24 sm:px-6">
         <div className="grid items-center gap-14 lg:grid-cols-2">
           <div>
             <SectionHeading
@@ -280,7 +361,7 @@ export function Home({
       </section>
 
       {/* ================= IMPACT + REGIONS ================= */}
-      <section className="bg-ink text-cream py-24">
+      <section id="impact" className="scroll-mt-28 bg-ink text-cream py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
             <SectionHeading
@@ -302,14 +383,22 @@ export function Home({
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {GHANA_REGIONS.map((r) => (
-                  <div key={r.id} className="rounded-xl border border-white/10 bg-card/5 px-3 py-2">
-                    <p className="text-[13px] font-bold">{r.name}</p>
+                  <button
+                    key={r.id}
+                    onClick={() => setRegion(r)}
+                    className="group rounded-xl border border-white/10 bg-card/5 px-3 py-2 text-left transition-all hover:border-flag-gold/70 hover:bg-flag-gold/10 cursor-pointer"
+                    title={`Explore ${r.name}`}
+                  >
+                    <p className="flex items-center gap-1 text-[13px] font-bold group-hover:text-flag-gold">
+                      {r.name}
+                      <ChevronRight size={11} className="opacity-0 -ml-1 transition-all group-hover:opacity-100" />
+                    </p>
                     <p className="text-[11px] text-cream/50">{r.capital}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
               <p className="mt-4 text-[13px] leading-relaxed text-cream/60">
-                From Nalerigu to Sekondi, Ho to Wa — members in every corner of the country,
+                From Nalerigu to Sekondi, Ho to Wa — tap any region to see what's happening there,
                 plus diaspora chapters across 14 countries.
               </p>
             </Card>
@@ -338,7 +427,7 @@ export function Home({
       </section>
 
       {/* ================= FEATURED PROJECTS ================= */}
-      <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+      <section id="projects" className="mx-auto max-w-7xl scroll-mt-28 px-4 py-24 sm:px-6">
         <SectionHeading
           eyebrow="Projects on the ground"
           title={<>Stories of <span className="text-flag-green">service</span> across Ghana.</>}
@@ -423,7 +512,7 @@ export function Home({
 
       {/* ================= UPCOMING EVENTS ================= */}
       {upcomingEvents.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
+        <section id="events" className="mx-auto max-w-7xl scroll-mt-28 px-4 pb-16 sm:px-6">
           <div className="flex items-end justify-between gap-4">
             <SectionHeading
               eyebrow="Mark your calendar"
@@ -473,8 +562,79 @@ export function Home({
         </section>
       )}
 
+      {/* ================= FEATURED EVENTS CAROUSEL ================= */}
+      {featuredEvents.length > 0 && (
+        <section className="bg-soft py-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="mb-8 flex items-end justify-between gap-4">
+              <SectionHeading
+                eyebrow="Spotlight"
+                title={<>Featured <span className="text-flag-red">events</span></>}
+                sub="Hand-picked by the circle — hover or tap to pause, click to explore."
+              />
+              <button
+                onClick={() => go("events")}
+                className="hidden sm:inline-flex items-center gap-1.5 text-sm font-bold text-flag-red hover:gap-2.5 transition-all cursor-pointer"
+              >
+                All events <ChevronRight size={15} />
+              </button>
+            </div>
+
+            <div
+              ref={carouselRef}
+              onMouseEnter={() => setPaused(true)}
+              onMouseLeave={() => setPaused(false)}
+              onTouchStart={() => setPaused(true)}
+              onTouchEnd={() => setPaused(false)}
+              className="no-scrollbar flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth pb-2"
+            >
+              {featuredEvents.map((e) => {
+                const d = new Date(e.date);
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => go("events")}
+                    className="group relative w-[300px] sm:w-[340px] shrink-0 snap-start overflow-hidden rounded-3xl text-left shadow-lg card-lift cursor-pointer"
+                  >
+                    <div className="relative h-44 overflow-hidden">
+                      <img
+                        src={e.image}
+                        alt={e.title}
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/20 to-transparent" />
+                      <Chip tone="gold" className="absolute left-3 top-3">
+                        <Star size={11} /> Featured
+                      </Chip>
+                      <div className="absolute bottom-3 left-3 flex items-center gap-2 text-cream">
+                        <span className="flex h-12 w-12 flex-col items-center justify-center rounded-2xl bg-ink/80 backdrop-blur">
+                          <span className="font-display text-lg font-bold leading-none">{d.getDate()}</span>
+                          <span className="text-[9px] font-semibold uppercase tracking-wider text-flag-gold">
+                            {d.toLocaleDateString("en-GB", { month: "short" })}
+                          </span>
+                        </span>
+                        <span className="text-[13px] font-bold leading-tight">{e.title}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-card px-4 py-3">
+                      <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-fg/55">
+                        {e.mode === "virtual" ? <Video size={12} className="shrink-0 text-flag-green" /> : <MapPin size={12} className="shrink-0 text-flag-green" />}
+                        <span className="truncate">{e.location}</span>
+                      </span>
+                      <span className="shrink-0 text-[11px] font-bold text-flag-red">
+                        {e.attendeeCount} going →
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ================= CIVIC PLEDGE ================= */}
-      <section className="relative overflow-hidden bg-ink text-cream py-24">
+      <section id="civic" className="relative scroll-mt-28 overflow-hidden bg-ink text-cream py-24">
         <div className="absolute inset-0">
           <img src="/output/images/civic.jpg" alt="Civic engagement" className="h-full w-full object-cover opacity-25" />
           <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/60" />
@@ -512,7 +672,7 @@ export function Home({
       </section>
 
       {/* ================= COMMUNITY TEASER ================= */}
-      <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+      <section id="community" className="mx-auto max-w-7xl scroll-mt-28 px-4 py-24 sm:px-6">
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div>
             <SectionHeading
@@ -577,7 +737,7 @@ export function Home({
       </section>
 
       {/* ================= STORIES / NEWS ================= */}
-      <section className="bg-soft py-24">
+      <section id="stories" className="scroll-mt-28 bg-soft py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <SectionHeading
             eyebrow="From the circle"
@@ -605,9 +765,82 @@ export function Home({
         </div>
       </section>
 
+      {/* ================= HOT CONVERSATIONS ================= */}
+      {hotThreads.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+          <SectionHeading
+            eyebrow="Happening now"
+            title={<>Hot <span className="text-flag-red">conversations</span></>}
+            sub="The most engaged discussions across the circle this fortnight — jump in or share them with your network."
+            className="mb-12"
+          />
+          <div className="grid gap-6 md:grid-cols-3">
+            {hotThreads.map((t, i) => {
+              const share = shareThread(t.title, t.authorName);
+              return (
+                <Card key={t.id} hover className="flex flex-col p-6">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-flag-red">
+                      <Flame size={14} className="fill-flag-red/20" /> #{i + 1} hot
+                    </span>
+                    <span className="text-[11px] font-semibold text-fg/40">{timeAgo(t.createdAt)}</span>
+                  </div>
+                  <button onClick={() => go("community")} className="text-left cursor-pointer">
+                    <h3 className="font-display text-lg font-bold leading-snug hover:text-flag-red transition-colors line-clamp-2">
+                      {t.title}
+                    </h3>
+                    <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-fg/60">{t.body}</p>
+                  </button>
+                  <div className="mt-4 flex items-center gap-3 text-[12px] font-semibold text-fg/50">
+                    <span className="flex items-center gap-1"><Users size={13} /> {t.authorName}</span>
+                    <span className="flex items-center gap-1"><ThumbsUp size={13} /> {t.likes}</span>
+                    <span className="flex items-center gap-1"><MessageSquareHeart size={13} /> {t.replyCount}</span>
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 border-t border-fg/8 pt-4">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-fg/35">Share</span>
+                    <a
+                      href={share.whatsapp}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Share on WhatsApp"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-flag-green/10 text-flag-green hover:bg-flag-green hover:text-cream transition-colors"
+                    >
+                      <WhatsAppIcon size={15} />
+                    </a>
+                    <a
+                      href={share.facebook}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Share on Facebook"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1877F2]/10 text-[#1877F2] hover:bg-[#1877F2] hover:text-cream transition-colors"
+                    >
+                      <FacebookIcon size={15} />
+                    </a>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(share.text);
+                          toast("Copied — paste it anywhere to share");
+                        } catch {
+                          toast("Couldn't copy", "error");
+                        }
+                      }}
+                      title="Copy text"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-ink/5 text-fg/60 hover:bg-ink hover:text-cream transition-colors cursor-pointer"
+                    >
+                      <Link2 size={15} />
+                    </button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* ================= STAY CONNECTED EVERYWHERE ================= */}
       {(settings?.socials ?? []).some((s) => s.url && s.url !== "#") && (
-        <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+        <section id="connect" className="mx-auto max-w-7xl scroll-mt-28 px-4 py-24 sm:px-6">
           <SectionHeading
             eyebrow="Join us everywhere"
             title={<>One circle, <span className="text-flag-red">every channel.</span></>}
@@ -679,6 +912,107 @@ export function Home({
           </div>
         </div>
       </section>
+      {/* ================= REGION DETAIL MODAL ================= */}
+      <Modal open={!!region} onClose={() => setRegion(null)} wide>
+        {region && (
+          <div className="p-6 sm:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-flag-red">
+                  <MapPin size={13} /> {region.capital} · Ghana
+                </p>
+                <h2 className="font-display text-3xl font-bold">{region.name} Region</h2>
+              </div>
+              <span className="flag-stripes mt-1 h-[4px] w-16 shrink-0 rounded-full" aria-hidden />
+            </div>
+
+            <div className="mt-6 grid gap-6 sm:grid-cols-2">
+              <div>
+                <p className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-fg/50">
+                  <HandHeart size={15} className="text-flag-green" /> Projects here
+                </p>
+                {(heroProjects ?? []).filter((p) => p.region === region.id).length === 0 ? (
+                  <p className="rounded-2xl bg-soft px-4 py-3 text-[13px] text-fg/55">
+                    No active projects yet — be the first to start one in {region.name}. 🇬🇭
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {(heroProjects ?? [])
+                      .filter((p) => p.region === region.id)
+                      .slice(0, 4)
+                      .map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => go("projects")}
+                          className="flex w-full items-center gap-3 rounded-2xl border border-fg/8 bg-card p-3 text-left transition-colors hover:border-flag-green/50 cursor-pointer"
+                        >
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-flag-green/10 text-flag-green">
+                            {THEME_ICONS[p.theme]}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-bold">{p.title}</span>
+                            <span className="block text-[11px] text-fg/45">
+                              {p.volunteers} volunteers · {formatNumber(p.hours)} hrs
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-fg/50">
+                  <CalendarDays size={15} className="text-flag-red" /> Events here
+                </p>
+                {(events ?? []).filter((e) => e.region === region.id && e.date >= new Date().toISOString()).length === 0 ? (
+                  <p className="rounded-2xl bg-soft px-4 py-3 text-[13px] text-fg/55">
+                    Nothing scheduled in {region.name} yet — check back soon.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {(events ?? [])
+                      .filter((e) => e.region === region.id && e.date >= new Date().toISOString())
+                      .slice(0, 4)
+                      .map((e) => (
+                        <button
+                          key={e.id}
+                          onClick={() => go("events")}
+                          className="flex w-full items-center gap-3 rounded-2xl border border-fg/8 bg-card p-3 text-left transition-colors hover:border-flag-red/50 cursor-pointer"
+                        >
+                          <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl bg-ink text-cream">
+                            <span className="font-display text-sm font-bold leading-none">
+                              {new Date(e.date).getDate()}
+                            </span>
+                            <span className="text-[8px] font-semibold uppercase text-flag-gold">
+                              {new Date(e.date).toLocaleDateString("en-GB", { month: "short" })}
+                            </span>
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-bold">{e.title}</span>
+                            <span className="block text-[11px] text-fg/45">
+                              {e.location} · {e.attendeeCount} going
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-flag-gold/30 bg-gold-soft/20 px-4 py-3">
+              <p className="text-[13px] text-fg/70">
+                From <strong>{region.capital}</strong> to the world — {region.name} members are in the circle.
+                Join the conversation and keep your region visible.
+              </p>
+              <Button variant="dark" onClick={() => { setRegion(null); go("community"); }}>
+                Join the discussion <ArrowRight size={15} />
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

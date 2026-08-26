@@ -24,6 +24,9 @@ export const roomKV = createKV<Room>("rooms");
 
 // ---------- Messages ----------
 
+export const REACTION_TYPES = ["like", "love", "smile", "angry", "undecided"] as const;
+export type ReactionType = (typeof REACTION_TYPES)[number];
+
 export const MessageSchema = z.object({
   id: z.string(),
   roomId: z.string(),
@@ -32,11 +35,32 @@ export const MessageSchema = z.object({
   authorRegion: z.string(),
   text: z.string(),
   createdAt: z.string(),
+  replyToId: z.string().nullable(),
+  reactions: z.record(z.string(), z.array(z.string())),
+  savedBy: z.array(z.string()),
+  editedAt: z.string().nullable(),
+  deleted: z.boolean(),
+  mentions: z.array(z.object({ id: z.string(), name: z.string() })),
+  audio: z.string().nullable(),
 });
 
 export type Message = z.output<typeof MessageSchema>;
 
 export const messageKV = createKV<Message>("messages");
+
+// Old stored messages predate reactions/replies — fill safe defaults on read
+function normalizeMessage(m: Message): Message {
+  return {
+    ...m,
+    replyToId: m.replyToId ?? null,
+    reactions: m.reactions ?? {},
+    savedBy: m.savedBy ?? [],
+    editedAt: m.editedAt ?? null,
+    deleted: m.deleted ?? false,
+    mentions: m.mentions ?? [],
+    audio: m.audio ?? null,
+  };
+}
 
 // ---------- Forum threads ----------
 
@@ -50,6 +74,7 @@ export const ThreadSchema = z.object({
   likes: z.number(),
   likedBy: z.array(z.string()),
   createdAt: z.string(),
+  editedAt: z.string().nullable(),
 });
 
 export type Thread = z.output<typeof ThreadSchema>;
@@ -63,11 +88,25 @@ export const ReplySchema = z.object({
   authorName: z.string(),
   text: z.string(),
   createdAt: z.string(),
+  editedAt: z.string().nullable(),
+  deleted: z.boolean(),
 });
 
 export type Reply = z.output<typeof ReplySchema>;
 
 export const replyKV = createKV<Reply>("replies");
+
+function normalizeReply(r: Reply): Reply {
+  return {
+    ...r,
+    editedAt: r.editedAt ?? null,
+    deleted: r.deleted ?? false,
+  };
+}
+
+function normalizeThread(t: Thread): Thread {
+  return { ...t, editedAt: t.editedAt ?? null };
+}
 
 // ---------- Reports ----------
 
@@ -105,8 +144,9 @@ const getMessages = os
   .handler(async ({ input }) => {
     const msgs = (await messageKV.getAllItems())
       .filter((m) => m.roomId === input.roomId)
+      .map(normalizeMessage)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .slice(-60);
+      .slice(-80);
     return withAuthorInfo(msgs);
   });
 
@@ -130,6 +170,7 @@ const getThreads = os.handler(async () => {
   const threads = await threadKV.getAllItems();
   const replies = await replyKV.getAllItems();
   const withCounts = threads
+    .map(normalizeThread)
     .map((t) => ({
       ...t,
       replyCount: replies.filter((r) => r.threadId === t.id).length,
@@ -143,8 +184,9 @@ const getThread = os.input(z.object({ threadId: z.string() })).handler(async ({ 
   if (!thread) throw new Error("Thread not found");
   const replies = (await replyKV.getAllItems())
     .filter((r) => r.threadId === input.threadId)
+    .map(normalizeReply)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  return { thread: (await withAuthorInfo([thread]))[0], replies: await withAuthorInfo(replies) };
+  return { thread: (await withAuthorInfo([normalizeThread(thread)]))[0], replies: await withAuthorInfo(replies) };
 });
 
 export const community = {
@@ -211,10 +253,32 @@ export const community = {
         memberId: z.string(),
         roomId: z.string(),
         text: z.string().min(1).max(2000),
+        replyToId: z.string().nullable().optional(),
+        mentionIds: z.array(z.string()).max(10).optional(),
+        audio: z.string().nullable().optional(),
       }),
     )
     .handler(async ({ input }) => {
       const member = await requireMember(input.memberId);
+      if (input.audio && (!input.audio.startsWith("data:audio/") || input.audio.length > 600_000)) {
+        throw new Error("Voice message is too large (max ~60 seconds)");
+      }
+      // Resolve @mentions to member names and fan out notifications
+      const mentions: { id: string; name: string }[] = [];
+      const room = await roomKV.getItem(input.roomId);
+      for (const id of [...new Set(input.mentionIds ?? [])]) {
+        if (id === member.id) continue;
+        const target = await memberKV.getItem(id);
+        if (target && mentions.length < 10) {
+          mentions.push({ id: target.id, name: target.name });
+          await notify(
+            target.id,
+            "system",
+            `${member.name} mentioned you`,
+            `In #${room?.name ?? "chat"}: ${input.text.trim().slice(0, 90)}`,
+          ).catch(() => {});
+        }
+      }
       const message: Message = {
         id: randomUUID(),
         roomId: input.roomId,
@@ -223,19 +287,122 @@ export const community = {
         authorRegion: member.region,
         text: input.text.trim(),
         createdAt: new Date().toISOString(),
+        replyToId: input.replyToId ?? null,
+        reactions: {},
+        savedBy: [],
+        editedAt: null,
+        deleted: false,
+        mentions,
+        audio: input.audio ?? null,
       };
       await messageKV.setItem(message.id, message);
       await addPoints(member.id, POINTS.MESSAGE);
       return message;
     }),
+  addReaction: os
+    .input(
+      z.object({
+        memberId: z.string(),
+        messageId: z.string(),
+        type: z.enum(REACTION_TYPES),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const member = await requireMember(input.memberId);
+      const raw = await messageKV.getItem(input.messageId);
+      if (!raw) throw new Error("Message not found");
+      const message = normalizeMessage(raw);
+      const reactions = { ...message.reactions };
+      const current = reactions[input.type] ?? [];
+      const reacted = current.includes(member.id);
+      reactions[input.type] = reacted
+        ? current.filter((id) => id !== member.id)
+        : [...current, member.id];
+      if (reactions[input.type].length === 0) delete reactions[input.type];
+      const updated = { ...message, reactions };
+      await messageKV.setItem(updated.id, updated);
+      return updated;
+    }),
+  toggleSaveMessage: os
+    .input(z.object({ memberId: z.string(), messageId: z.string() }))
+    .handler(async ({ input }) => {
+      const member = await requireMember(input.memberId);
+      const raw = await messageKV.getItem(input.messageId);
+      if (!raw) throw new Error("Message not found");
+      const message = normalizeMessage(raw);
+      const saved = message.savedBy.includes(member.id);
+      const updatedMessage = {
+        ...message,
+        savedBy: saved
+          ? message.savedBy.filter((id) => id !== member.id)
+          : [...message.savedBy, member.id],
+      };
+      await messageKV.setItem(updatedMessage.id, updatedMessage);
+      const savedMessages = member.savedMessages ?? [];
+      const updatedMember = {
+        ...member,
+        savedMessages: saved
+          ? savedMessages.filter((id) => id !== message.id)
+          : [...savedMessages, message.id],
+      };
+      await memberKV.setItem(member.id, updatedMember);
+      return updatedMessage;
+    }),
+  getSavedMessages: os
+    .input(z.object({ memberId: z.string() }))
+    .handler(async ({ input }) => {
+      await requireMember(input.memberId);
+      const member = await memberKV.getItem(input.memberId);
+      const ids = member?.savedMessages ?? [];
+      if (ids.length === 0) return [];
+      const all = (await messageKV.getAllItems()).map(normalizeMessage);
+      return withAuthorInfo(all.filter((m) => ids.includes(m.id)));
+    }),
+  editMessage: os
+    .input(
+      z.object({
+        memberId: z.string(),
+        messageId: z.string(),
+        text: z.string().min(1).max(2000),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const member = await requireMember(input.memberId);
+      const raw = await messageKV.getItem(input.messageId);
+      if (!raw) throw new Error("Message not found");
+      const message = normalizeMessage(raw);
+      if (message.deleted) throw new Error("This message was deleted");
+      const canEdit =
+        message.authorId === member.id || (await canModerate(member.id, message.roomId));
+      if (!canEdit) throw new Error("You can only edit your own messages");
+      const updated = {
+        ...message,
+        text: input.text.trim(),
+        editedAt: new Date().toISOString(),
+      };
+      await messageKV.setItem(updated.id, updated);
+      return updated;
+    }),
   deleteMessage: os
     .input(z.object({ memberId: z.string(), messageId: z.string() }))
     .handler(async ({ input }) => {
-      const message = await messageKV.getItem(input.messageId);
-      if (!message) throw new Error("Message not found");
-      const ok = await canModerate(input.memberId, message.roomId);
-      if (!ok) throw new Error("You can only moderate rooms assigned to you");
-      await messageKV.removeItem(input.messageId);
+      const member = await requireMember(input.memberId);
+      const raw = await messageKV.getItem(input.messageId);
+      if (!raw) throw new Error("Message not found");
+      const message = normalizeMessage(raw);
+      const canDelete =
+        message.authorId === member.id || (await canModerate(member.id, message.roomId));
+      if (!canDelete) throw new Error("You can only delete your own messages");
+      // Soft delete — keeps replies and thread structure intact
+      await messageKV.setItem(message.id, {
+        ...message,
+        text: "",
+        deleted: true,
+        reactions: {},
+        savedBy: [],
+        mentions: [],
+        audio: null,
+      });
     }),
 
   // forum
@@ -270,6 +437,7 @@ export const community = {
         likes: 0,
         likedBy: [],
         createdAt: new Date().toISOString(),
+        editedAt: null,
       };
       await threadKV.setItem(thread.id, thread);
       await addPoints(member.id, POINTS.THREAD);
@@ -292,6 +460,8 @@ export const community = {
         authorName: member.name,
         text: input.text.trim(),
         createdAt: new Date().toISOString(),
+        editedAt: null,
+        deleted: false,
       };
       await replyKV.setItem(reply.id, reply);
       await addPoints(member.id, POINTS.REPLY);
@@ -333,16 +503,83 @@ export const community = {
       }
       return updated;
     }),
+  editThread: os
+    .input(
+      z.object({
+        memberId: z.string(),
+        threadId: z.string(),
+        title: z.string().min(3).max(200),
+        body: z.string().min(3).max(5000),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const member = await requireMember(input.memberId);
+      const raw = await threadKV.getItem(input.threadId);
+      if (!raw) throw new Error("Thread not found");
+      const thread = normalizeThread(raw);
+      const canEdit =
+        thread.authorId === member.id || (await canModerate(member.id, thread.roomId));
+      if (!canEdit) throw new Error("You can only edit your own discussions");
+      const updated = {
+        ...thread,
+        title: input.title.trim(),
+        body: input.body.trim(),
+        editedAt: new Date().toISOString(),
+      };
+      await threadKV.setItem(updated.id, updated);
+      return updated;
+    }),
   deleteThread: os
     .input(z.object({ memberId: z.string(), threadId: z.string() }))
     .handler(async ({ input }) => {
-      const thread = await threadKV.getItem(input.threadId);
-      if (!thread) throw new Error("Thread not found");
-      const ok = await canModerate(input.memberId, thread.roomId);
-      if (!ok) throw new Error("You can only moderate rooms assigned to you");
+      const member = await requireMember(input.memberId);
+      const raw = await threadKV.getItem(input.threadId);
+      if (!raw) throw new Error("Thread not found");
+      const thread = normalizeThread(raw);
+      const canDelete =
+        thread.authorId === member.id || (await canModerate(member.id, thread.roomId));
+      if (!canDelete) throw new Error("You can only delete your own discussions");
       await threadKV.removeItem(input.threadId);
       for (const r of await replyKV.getAllItems())
         if (r.threadId === input.threadId) await replyKV.removeItem(r.id);
+    }),
+
+  editReply: os
+    .input(
+      z.object({
+        memberId: z.string(),
+        replyId: z.string(),
+        text: z.string().min(1).max(3000),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const member = await requireMember(input.memberId);
+      const raw = await replyKV.getItem(input.replyId);
+      if (!raw) throw new Error("Reply not found");
+      const reply = normalizeReply(raw);
+      if (reply.deleted) throw new Error("This reply was deleted");
+      const thread = await threadKV.getItem(reply.threadId);
+      const canEdit =
+        reply.authorId === member.id ||
+        (thread ? await canModerate(member.id, thread.roomId) : false);
+      if (!canEdit) throw new Error("You can only edit your own replies");
+      const updated = { ...reply, text: input.text.trim(), editedAt: new Date().toISOString() };
+      await replyKV.setItem(updated.id, updated);
+      return updated;
+    }),
+  deleteReply: os
+    .input(z.object({ memberId: z.string(), replyId: z.string() }))
+    .handler(async ({ input }) => {
+      const member = await requireMember(input.memberId);
+      const raw = await replyKV.getItem(input.replyId);
+      if (!raw) throw new Error("Reply not found");
+      const reply = normalizeReply(raw);
+      const thread = await threadKV.getItem(reply.threadId);
+      const canDelete =
+        reply.authorId === member.id ||
+        (thread ? await canModerate(member.id, thread.roomId) : false);
+      if (!canDelete) throw new Error("You can only delete your own replies");
+      await replyKV.setItem(reply.id, { ...reply, text: "", deleted: true });
     }),
 
   // reports

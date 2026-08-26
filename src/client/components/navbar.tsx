@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Menu, X, LayoutDashboard, LogOut, Sun, Moon, Globe, Check } from "lucide-react";
+import { Menu, X, LayoutDashboard, LogOut, Sun, Moon, Globe, Check, MessagesSquare } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Logo, LogoMark } from "@/client/lib/logo";
 import { useStore } from "@/client/store";
 import { Avatar, Button, Chip } from "./ui";
 import { ProfileModal } from "./profile";
 import { NotificationBell } from "./notifications";
+import { DmModal } from "./dm-modal";
 import { LANGS, useI18n } from "@/client/lib/i18n";
 import { cn } from "@/client/lib/format";
+import { queryClient } from "@/client/rpc-client";
 
 export type Tab =
   | "home"
@@ -45,6 +48,7 @@ export function Navbar({
   const [scrolled, setScrolled] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const [dmOpen, setDmOpen] = useState(false);
   // Default follows the visitor's device preference; a manual toggle wins and is remembered
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("adom_theme");
@@ -76,6 +80,14 @@ export function Navbar({
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
+
+  const { data: dmUnread } = useQuery(
+    queryClient.dms.unreadTotal.queryOptions({
+      input: { memberId: user?.id ?? "" },
+      enabled: !!user,
+      refetchInterval: 30_000,
+    }),
+  );
 
   const go = (t: Tab) => {
     onTab(t);
@@ -181,6 +193,25 @@ export function Navbar({
               </div>
             )}
           </div>
+
+          {user && (
+            <button
+              onClick={() => setDmOpen(true)}
+              className={cn(
+                "relative rounded-full p-2.5 transition-colors cursor-pointer",
+                solid ? "text-fg/70 hover:text-fg hover:bg-ink/5" : "text-cream/80 hover:text-cream hover:bg-white/10",
+              )}
+              aria-label="Private messages"
+              title="Private messages"
+            >
+              <MessagesSquare size={18} />
+              {(dmUnread ?? 0) > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-flag-red px-1 text-[10px] font-bold text-cream">
+                  {dmUnread! > 9 ? "9+" : dmUnread}
+                </span>
+              )}
+            </button>
+          )}
 
           {user && <NotificationBell />}
 
@@ -304,6 +335,7 @@ export function Navbar({
       )}
 
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <DmModal open={dmOpen} onClose={() => setDmOpen(false)} />
     </header>
   );
 }

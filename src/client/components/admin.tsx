@@ -23,16 +23,20 @@ import {
   Trophy,
   Mail,
   MailOpen,
+  Pencil,
+  ShieldBan,
+  ShieldCheck,
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
-import { Button, Card, Chip, Toggle, Avatar } from "./ui";
+import { Button, Card, Chip, Toggle, Avatar, Modal } from "./ui";
 import { RankChip } from "@/client/lib/ranks";
 import { DeepSeekRateCard, DeepSeekStatusPill } from "./deepseek-card";
 import { captchaConfigured } from "@/client/lib/captcha";
 import { cn, timeAgo } from "@/client/lib/format";
 import { GHANA_REGIONS } from "@/server/data/regions";
 import type { Settings } from "@/server/rpc/site";
+import type { PublicMember } from "@/server/rpc/members";
 
 const TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -571,12 +575,55 @@ function MembersManager() {
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
+  const setStatus = useMutation(
+    queryClient.members.setStatus.mutationOptions({
+      onSuccess: (_d, vars) => toast(vars.status === "suspended" ? "Member suspended" : "Member reactivated"),
+      onError: (e: any) => toast(e?.message, "error"),
+    }),
+  );
+  const adminUpdate = useMutation(
+    queryClient.members.adminUpdateMember.mutationOptions({
+      onSuccess: () => {
+        toast("Member profile updated");
+        setEditing(null);
+      },
+      onError: (e: any) => toast(e?.message, "error"),
+    }),
+  );
   const remove = useMutation(
     queryClient.members.remove.mutationOptions({
       onSuccess: () => toast("Member removed"),
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
+  const [editing, setEditing] = useState<PublicMember | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    region: "",
+    hometown: "",
+    diasporaCountry: "",
+    church: "",
+    profession: "",
+    bio: "",
+  });
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  const startEdit = (m: PublicMember) => {
+    setEditing(m);
+    setEditForm({
+      name: m.name,
+      email: m.email,
+      phone: m.phone ?? "",
+      region: m.region,
+      hometown: m.hometown,
+      diasporaCountry: m.diasporaCountry,
+      church: m.church,
+      profession: m.profession,
+      bio: m.bio,
+    });
+  };
 
   const filtered = useMemo(
     () => (members ?? []).filter((m) => m.name.toLowerCase().includes(q.toLowerCase()) || m.email.toLowerCase().includes(q.toLowerCase())),
@@ -604,6 +651,11 @@ function MembersManager() {
                 <p className="text-sm font-bold">{m.name}</p>
                 <RankChip points={m.points} role={m.role} size="md" />
                 <span className="text-[11px] font-bold text-fg/40">{m.points.toLocaleString()} pts</span>
+                {(m as any).status === "suspended" && (
+                  <Chip tone="red" className="px-2 py-0.5 text-[10px] uppercase">
+                    <ShieldBan size={10} /> Suspended
+                  </Chip>
+                )}
               </div>
               <p className="truncate text-[12px] text-fg/45">
                 {m.email} · {GHANA_REGIONS.find((r) => r.id === m.region)?.name ?? m.region}
@@ -639,11 +691,43 @@ function MembersManager() {
                 title="Points"
               />
               <button
-                onClick={() => user && remove.mutate({ adminId: user.id, memberId: m.id })}
-                className="rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
-                title="Remove member"
+                onClick={() => startEdit(m)}
+                className="rounded-full p-2 text-fg/30 hover:text-flag-green hover:bg-flag-green/5 cursor-pointer"
+                title="Edit member profile"
               >
-                <Trash2 size={15} />
+                <Pencil size={15} />
+              </button>
+              <button
+                onClick={() =>
+                  user &&
+                  setStatus.mutate({
+                    adminId: user.id,
+                    memberId: m.id,
+                    status: (m as any).status === "suspended" ? "active" : "suspended",
+                  })
+                }
+                className={`rounded-full p-2 cursor-pointer ${
+                  (m as any).status === "suspended"
+                    ? "text-flag-green hover:bg-flag-green/10"
+                    : "text-fg/30 hover:text-clay hover:bg-flag-gold/10"
+                }`}
+                title={(m as any).status === "suspended" ? "Reactivate member" : "Suspend member"}
+              >
+                {(m as any).status === "suspended" ? <ShieldCheck size={15} /> : <ShieldBan size={15} />}
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmRemove === m.id) {
+                    user && remove.mutate({ adminId: user.id, memberId: m.id });
+                  } else {
+                    setConfirmRemove(m.id);
+                    setTimeout(() => setConfirmRemove((cur) => (cur === m.id ? null : cur)), 3000);
+                  }
+                }}
+                className="rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+                title={confirmRemove === m.id ? "Tap again to confirm removal" : "Remove member"}
+              >
+                <Trash2 size={15} className={confirmRemove === m.id ? "text-flag-red" : ""} />
               </button>
             </div>
             {m.role === "moderator" && (
@@ -681,7 +765,109 @@ function MembersManager() {
         ))}
         {filtered.length === 0 && <p className="p-10 text-center text-sm text-fg/45">No members found.</p>}
       </div>
+
+      {/* Edit member modal */}
+      <Modal open={!!editing} onClose={() => setEditing(null)} wide>
+        {editing && (
+          <div className="p-6 sm:p-8">
+            <div className="mb-5 flex items-center gap-3">
+              <Avatar name={editing.name} size={42} />
+              <div>
+                <p className="font-display text-xl font-bold">{editing.name}</p>
+                <p className="text-sm text-fg/50">
+                  {editing.email} · {editing.points.toLocaleString()} pts
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ModalField label="Full name">
+                <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className={inputCls} />
+              </ModalField>
+              <ModalField label="Email">
+                <input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className={inputCls} />
+              </ModalField>
+              <ModalField label="Phone">
+                <input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className={inputCls} />
+              </ModalField>
+              <ModalField label="Region">
+                <select
+                  value={editForm.region}
+                  onChange={(e) => setEditForm({ ...editForm, region: e.target.value })}
+                  className={inputCls}
+                >
+                  {GHANA_REGIONS.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </ModalField>
+              <ModalField label="Hometown">
+                <input value={editForm.hometown} onChange={(e) => setEditForm({ ...editForm, hometown: e.target.value })} className={inputCls} />
+              </ModalField>
+              <ModalField label="Diaspora country">
+                <input value={editForm.diasporaCountry} onChange={(e) => setEditForm({ ...editForm, diasporaCountry: e.target.value })} className={inputCls} />
+              </ModalField>
+              <ModalField label="Church / denomination">
+                <input value={editForm.church} onChange={(e) => setEditForm({ ...editForm, church: e.target.value })} className={inputCls} />
+              </ModalField>
+              <ModalField label="Profession">
+                <input value={editForm.profession} onChange={(e) => setEditForm({ ...editForm, profession: e.target.value })} className={inputCls} />
+              </ModalField>
+              <div className="sm:col-span-2">
+                <ModalField label="Bio">
+                  <textarea
+                    value={editForm.bio}
+                    onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                    rows={3}
+                    className={inputCls}
+                  />
+                </ModalField>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+              <Button
+                variant="gold"
+                onClick={() =>
+                  user &&
+                  editing &&
+                  adminUpdate.mutate({
+                    adminId: user.id,
+                    memberId: editing.id,
+                    patch: {
+                      name: editForm.name,
+                      email: editForm.email,
+                      phone: editForm.phone || null,
+                      region: editForm.region,
+                      hometown: editForm.hometown,
+                      diasporaCountry: editForm.diasporaCountry,
+                      church: editForm.church,
+                      profession: editForm.profession,
+                      bio: editForm.bio,
+                    },
+                  })
+                }
+                disabled={adminUpdate.isPending}
+              >
+                {adminUpdate.isPending ? <Loader2 size={16} className="animate-spin" /> : <Pencil size={15} />}
+                Save changes
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </Card>
+  );
+}
+
+const inputCls =
+  "w-full rounded-xl border border-fg/15 bg-card px-3.5 py-2.5 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15";
+
+function ModalField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-fg/50">{label}</span>
+      {children}
+    </label>
   );
 }
 
