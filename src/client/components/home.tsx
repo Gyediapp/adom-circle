@@ -689,7 +689,7 @@ function ValueIcon({ icon }: { icon: string }) {
     dove: <Handshake size={22} />,
     heart: <HeartHandshake size={22} />,
     trending: <TrendingUp size={22} />,
-    vote: <Vote size={22} />,
+    vote: <Star size={22} />,
   };
   return map[icon] ?? <Star size={22} />;
 }
