@@ -20,6 +20,7 @@ import {
   Play,
   MessageCircle,
   Music2,
+  Handshake,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, rpcClient } from "@/client/rpc-client";
@@ -688,7 +689,7 @@ export function Home({
 function ValueIcon({ icon }: { icon: string }) {
   const map: Record<string, React.ReactNode> = {
     scale: <Scale size={22} />,
-    dove: <Star size={22} />,
+    dove: <Handshake size={22} />,
     heart: <HeartHandshake size={22} />,
     trending: <TrendingUp size={22} />,
     vote: <Vote size={22} />,

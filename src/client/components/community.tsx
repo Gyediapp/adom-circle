@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Send,
@@ -98,6 +98,25 @@ export function Community() {
     [threads, activeRoom],
   );
 
+  // On phones the room list stacks above the chat/forum panel, so selecting a
+  // room or switching views must scroll the panel into view (below the fixed header).
+  const panelRef = useRef<HTMLDivElement>(null);
+  const scrollToPanel = () => {
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      requestAnimationFrame(() =>
+        panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
+  };
+  const selectRoom = (id: string) => {
+    setRoomId(id);
+    scrollToPanel();
+  };
+  const selectView = (v: "chat" | "forum") => {
+    setView(v);
+    scrollToPanel();
+  };
+
   return (
     <div className="mx-auto max-w-7xl px-4 pt-36 pb-20 sm:px-6">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -113,10 +132,10 @@ export function Community() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant={view === "chat" ? "dark" : "outline"} onClick={() => setView("chat")}>
+          <Button variant={view === "chat" ? "dark" : "outline"} onClick={() => selectView("chat")}>
             <MessageSquare size={16} /> Chatrooms
           </Button>
-          <Button variant={view === "forum" ? "dark" : "outline"} onClick={() => setView("forum")}>
+          <Button variant={view === "forum" ? "dark" : "outline"} onClick={() => selectView("forum")}>
             <MessagesSquare size={16} /> Forum
           </Button>
         </div>
@@ -129,7 +148,7 @@ export function Community() {
           {rooms?.map((r) => (
             <button
               key={r.id}
-              onClick={() => setRoomId(r.id)}
+              onClick={() => selectRoom(r.id)}
               className={`w-full rounded-2xl border px-4 py-3 text-left transition-all cursor-pointer ${
                 activeRoom?.id === r.id
                   ? "border-fg bg-ink text-cream shadow-lg"
@@ -153,7 +172,7 @@ export function Community() {
         </div>
 
         {/* Main panel */}
-        <div>
+        <div ref={panelRef} className="scroll-mt-32">
           {view === "chat" && activeRoom && (
             <Card className="flex h-[68vh] flex-col overflow-hidden">
               <div className="flex items-center justify-between border-b border-fg/8 px-5 py-3.5">
