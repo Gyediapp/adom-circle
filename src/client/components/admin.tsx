@@ -633,7 +633,7 @@ function MembersManager() {
     profession: "",
     bio: "",
   });
-  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<PublicMember | null>(null);
 
   const startEdit = (m: PublicMember) => {
     setEditing(m);
@@ -741,18 +741,11 @@ function MembersManager() {
                 {(m as any).status === "suspended" ? <ShieldCheck size={15} /> : <ShieldBan size={15} />}
               </button>
               <button
-                onClick={() => {
-                  if (confirmRemove === m.id) {
-                    user && remove.mutate({ adminId: user.id, memberId: m.id });
-                  } else {
-                    setConfirmRemove(m.id);
-                    setTimeout(() => setConfirmRemove((cur) => (cur === m.id ? null : cur)), 3000);
-                  }
-                }}
+                onClick={() => setConfirmRemove(m)}
                 className="rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
-                title={confirmRemove === m.id ? "Tap again to confirm removal" : "Remove member"}
+                title="Delete member (permanently)"
               >
-                <Trash2 size={15} className={confirmRemove === m.id ? "text-flag-red" : ""} />
+                <Trash2 size={15} />
               </button>
             </div>
             {m.role === "moderator" && (
@@ -879,6 +872,39 @@ function MembersManager() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Delete member confirmation */}
+      <Modal open={!!confirmRemove} onClose={() => setConfirmRemove(null)}>
+        <div className="p-6 sm:p-8 text-center">
+          <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-flag-red/10 text-flag-red">
+            <Trash2 size={24} />
+          </span>
+          <p className="font-display text-xl font-bold">Delete this member?</p>
+          <p className="mt-2 text-sm leading-relaxed text-fg/60">
+            <strong className="text-fg">{confirmRemove?.name}</strong> ({confirmRemove?.email}) will be
+            permanently removed — account, sessions, notifications and DMs. Their chat messages will be
+            anonymised, and the email can be used to sign up again immediately.
+          </p>
+          <div className="mt-6 flex gap-2">
+            <Button variant="ghost" className="flex-1" onClick={() => setConfirmRemove(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (!user || !confirmRemove) return;
+                remove.mutate({ adminId: user.id, memberId: confirmRemove.id });
+                setConfirmRemove(null);
+              }}
+            >
+              {remove.isPending ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={15} />}
+              Delete permanently
+            </Button>
+          </div>
+        </div>
       </Modal>
     </Card>
   );

@@ -696,6 +696,8 @@ export const members = {
       }
       const member = await memberKV.getItem(input.memberId);
       if (!member) throw new Error("Member not found");
+      // Free the email for reuse — clear any signup attempts recorded for it
+      await attemptKV.removeItem(`signup:${member.email.toLowerCase()}`);
       // Remove the account
       await memberKV.removeItem(input.memberId);
       // Remove sessions
