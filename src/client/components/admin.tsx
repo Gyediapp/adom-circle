@@ -194,6 +194,31 @@ function Overview() {
         </div>
       </Card>
 
+      {/* Email delivery status */}
+      <Card className="p-5">
+        <p className="mb-3 text-sm font-bold">Email delivery</p>
+        <div
+          className={cn(
+            "rounded-2xl px-4 py-3",
+            data.emailLive ? "bg-flag-green/10" : "border border-dashed border-clay/50 bg-gold-soft/25",
+          )}
+        >
+          <p
+            className={cn(
+              "flex items-center gap-1.5 text-[13px] font-bold",
+              data.emailLive ? "text-flag-green" : "text-clay",
+            )}
+          >
+            <Mail size={14} /> {data.emailLive ? "Resend — live" : "Demo mode (codes shown on screen)"}
+          </p>
+          <p className="mt-0.5 text-[11px] text-fg/55">
+            {data.emailLive
+              ? "Verification & reset emails are delivered to real inboxes."
+              : "Set RESEND_API_KEY in Railway and redeploy to send real emails."}
+          </p>
+        </div>
+      </Card>
+
       {/* Broadcast */}
       <Card className="p-5">
         {!broadcastOpen ? (

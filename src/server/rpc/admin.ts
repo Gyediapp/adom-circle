@@ -52,6 +52,7 @@ export const admin = {
         contributions.reduce((s, c) => s + c.hours, 0);
 
       return {
+        emailLive: Boolean(process.env.RESEND_API_KEY),
         counts: {
           members: members.length,
           posts: posts.length,

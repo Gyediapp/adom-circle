@@ -118,10 +118,10 @@ export async function memberFromToken(token: string): Promise<Member | null> {
   return memberKV.getItem(s.memberId);
 }
 
-// ---------- Email sending (demo outbox; swap for SMTP in production) ----------
-// In production, replace the body of sendEmail with a real provider call
-// (Resend / Postmark / SMTP via nodemailer). The outbox doubles as a dev inbox
-// so flows are testable without a mail server.
+// ---------- Email sending (demo outbox; Resend in production) ----------
+// With RESEND_API_KEY set, emails are delivered through Resend (api.resend.com)
+// and the outbox doubles as an audit log. Without it, emails land only in the
+// outbox (demo mode) so flows stay testable.
 
 const CODE_TTL_MS = 1000 * 60 * 60 * 24; // verification codes: 24h
 const RESET_TTL_MS = 1000 * 60 * 30; // reset codes: 30 min
@@ -130,18 +130,85 @@ function makeCode(): string {
   return String(randomInt(0, 1000000)).padStart(6, "0");
 }
 
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Simple branded HTML email — flag colours, no external assets
+function emailHtml(subject: string, body: string, code: string | null): string {
+  const codeBlock = code
+    ? `<p style="margin:24px 0 4px;font-size:13px;color:#555">Your code:</p>
+       <p style="margin:4px 0 24px;font-size:30px;font-weight:bold;letter-spacing:10px;color:#ce1126">${escHtml(code)}</p>`
+    : "";
+  return `<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#faf6ec;font-family:Arial,Helvetica,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf6ec;padding:24px 0">
+<tr><td align="center">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #eee">
+<tr><td style="background:#0d1f17;padding:20px 32px">
+  <span style="color:#fcd116;font-size:20px;font-weight:bold;letter-spacing:3px">ADOM&nbsp;CIRCLE</span>
+  <span style="color:#f3efe4;font-size:12px;letter-spacing:1px;margin-left:10px">· One Circle. One Ghana.</span>
+</td></tr>
+<tr><td style="padding:32px;color:#0d1f17">
+  <h1 style="margin:0 0 16px;font-size:20px">${escHtml(subject)}</h1>
+  <p style="margin:0;font-size:14px;line-height:1.7;color:#333">${escHtml(body).replace(/\n/g, "<br/>")}</p>
+  ${codeBlock}
+  <p style="margin:24px 0 0;font-size:12px;color:#999">You received this email because of activity on adomcircle.org. If you didn't request this, you can safely ignore it.</p>
+</td></tr>
+<tr><td style="background:#0d1f17;padding:14px 32px;text-align:center">
+  <span style="color:#f3efe4;font-size:11px">© 2026 Adom Circle · adomcircle.org</span>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
 async function sendEmail(opts: {
   to: string;
   subject: string;
   body: string;
   debugCode: string | null;
 }): Promise<OutboxEmail> {
+  const apiKey = process.env.RESEND_API_KEY;
+  let live = false;
+  if (apiKey) {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM ?? "Adom Circle <noreply@adomcircle.org>",
+          to: opts.to,
+          subject: opts.subject,
+          html: emailHtml(opts.subject, opts.body, opts.debugCode),
+        }),
+      });
+      if (!res.ok) {
+        console.error(`Resend error ${res.status}:`, await res.text());
+      } else {
+        live = true;
+      }
+    } catch (err) {
+      console.error("Resend send failed:", err);
+    }
+  }
+  // Always keep the outbox as an audit log (Admin → Mailbox)
   const email: OutboxEmail = {
     id: randomUUID(),
     to: opts.to,
     subject: opts.subject,
     body: opts.body,
-    debugCode: opts.debugCode,
+    debugCode: live ? null : opts.debugCode, // hide demo codes once real mail flows
     sentAt: new Date().toISOString(),
     read: false,
   };
