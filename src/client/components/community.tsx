@@ -591,6 +591,128 @@ export function Community() {
 
         {/* Main panel */}
         <div ref={panelRef} className="scroll-mt-32">
+          {view === "chat" && activeRoom && activeRoom.id === "room-civic" && (
+            <div className="mb-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-fg/50">
+                  <BarChart3 size={13} className="text-flag-red" /> Community polls
+                </p>
+                {me && (
+                  <button
+                    onClick={() => setPollOpen(!pollOpen)}
+                    className="rounded-full border border-fg/15 px-3 py-1 text-[11px] font-bold text-fg/60 hover:border-flag-red hover:text-flag-red transition-colors cursor-pointer"
+                  >
+                    {pollOpen ? "Close" : "+ New poll"}
+                  </button>
+                )}
+              </div>
+
+              {pollOpen && (
+                <Card className="p-4">
+                  <input
+                    value={pollQuestion}
+                    onChange={(e) => setPollQuestion(e.target.value)}
+                    placeholder="Poll question — e.g. What's the most urgent civic issue?"
+                    className="w-full rounded-xl border border-fg/15 bg-card px-3 py-2 text-sm outline-none focus:border-flag-red"
+                  />
+                  {pollOptions.map((o, i) => (
+                    <div key={i} className="mt-2 flex items-center gap-2">
+                      <input
+                        value={o}
+                        onChange={(e) => {
+                          const next = [...pollOptions];
+                          next[i] = e.target.value;
+                          setPollOptions(next);
+                        }}
+                        placeholder={`Option ${i + 1}`}
+                        className="flex-1 rounded-xl border border-fg/15 bg-card px-3 py-2 text-sm outline-none focus:border-flag-red"
+                      />
+                      {pollOptions.length > 2 && (
+                        <button
+                          onClick={() => setPollOptions(pollOptions.filter((_, x) => x !== i))}
+                          className="text-fg/30 hover:text-flag-red cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => setPollOptions([...pollOptions, ""])}
+                      disabled={pollOptions.length >= 6}
+                      className="rounded-full border border-dashed border-fg/20 px-3 py-1 text-[11px] font-bold text-fg/50 hover:border-flag-green hover:text-flag-green disabled:opacity-40 cursor-pointer"
+                    >
+                      + Add option
+                    </button>
+                    <Button
+                      variant="dark"
+                      className="ml-auto rounded-full px-4 py-1.5 text-xs"
+                      disabled={pollQuestion.trim().length < 5 || pollOptions.some((o) => !o.trim())}
+                      onClick={() =>
+                        me &&
+                        createPoll.mutate({
+                          memberId: me.id,
+                          roomId: activeRoom.id,
+                          question: pollQuestion,
+                          options: pollOptions.map((o) => o.trim()).filter(Boolean),
+                        })
+                      }
+                    >
+                      Create poll
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
+              {(polls ?? []).slice(0, 3).map((p) => {
+                const total = p.total ?? 0;
+                const myChoice = myVote[p.id] ?? undefined;
+                return (
+                  <Card key={p.id} className="p-4">
+                    <p className="text-sm font-bold">{p.question}</p>
+                    <div className="mt-3 space-y-2">
+                      {p.options.map((opt, i) => {
+                        const count = p.counts?.[i] ?? 0;
+                        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                        const isMine = myChoice === i;
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              if (!me) return toast("Sign in to vote", "error");
+                              if (!p.open) return;
+                              votePoll.mutate({ memberId: me.id, pollId: p.id, optionIndex: i });
+                              setMyVote((v) => ({ ...v, [p.id]: i }));
+                            }}
+                            className={`relative w-full overflow-hidden rounded-xl border px-3 py-2 text-left text-sm transition-colors cursor-pointer ${
+                              isMine
+                                ? "border-flag-red bg-flag-red/5"
+                                : "border-fg/10 bg-card hover:border-flag-red/50"
+                            }`}
+                          >
+                            <span
+                              className="absolute inset-y-0 left-0 bg-flag-gold/20 transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                            <span className="relative flex items-center justify-between">
+                              <span className="font-semibold">{opt}</span>
+                              <span className="text-[11px] font-bold text-fg/50">{pct}%</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-[11px] font-semibold text-fg/40">
+                      {total} {total === 1 ? "vote" : "votes"}
+                      {!p.open && " · closed"}
+                    </p>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
           {view === "chat" && activeRoom && activeRoom.id === "room-projects" && (
             <div className="mb-5 space-y-3">
               <div className="flex items-center justify-between">
