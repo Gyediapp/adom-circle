@@ -36,6 +36,7 @@ type StoreCtx = {
   login: (email: string, password: string) => Promise<PublicMember>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  setUser: (u: PublicMember | null) => void;
   toasts: Toast[];
   toast: (msg: string, kind?: Toast["kind"]) => void;
   requireUser: () => PublicMember | null;
@@ -146,6 +147,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refresh,
+        setUser,
         toasts,
         toast,
         requireUser,

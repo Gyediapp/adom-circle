@@ -42,6 +42,8 @@ type MemberSeed = Omit<
   | "followerCount"
   | "savedMessages"
   | "status"
+  | "verified"
+  | "merchantName"
 >;
 
 const members: MemberSeed[] = [
@@ -263,10 +265,10 @@ const members: MemberSeed[] = [
   },
 ];
 
-const rooms: Room[] = [
+const rooms: Array<Omit<Room, "allowAnonymous">> = [
   { id: "room-general", name: "General", description: "Welcome, introductions and open conversation about Ghana.", icon: "🌍", color: "#CE1126", pinned: true, createdAt: now(400) },
   { id: "room-youth", name: "Youth & Education", description: "Mentorship, scholarships, schools and the next generation.", icon: "🎓", color: "#FCD116", pinned: true, createdAt: now(395) },
-  { id: "room-health", name: "Health & Welfare", description: "Clinics, clean water, nutrition and community care.", icon: "🩺", color: "#006B3F", pinned: true, createdAt: now(390) },
+  { id: "room-health", name: "Health & Welfare", description: "Clinics, clean water, nutrition and community care. Anonymous posting available.", icon: "🩺", color: "#006B3F", pinned: true, createdAt: now(390) },
   { id: "room-business", name: "Business & Economy", description: "Entrepreneurship, investment and buying Ghanaian.", icon: "📈", color: "#0E7490", pinned: true, createdAt: now(385) },
   { id: "room-civic", name: "Civic & Voting", description: "The Constitution, registration and peaceful elections.", icon: "🗳️", color: "#7C3AED", pinned: true, createdAt: now(380) },
   { id: "room-diaspora", name: "Diaspora Corner", description: "Ghanaians abroad — remittances, returns and connections.", icon: "✈️", color: "#B45309", pinned: false, createdAt: now(375) },
@@ -274,7 +276,12 @@ const rooms: Room[] = [
   { id: "room-projects", name: "Projects & Volunteering", description: "Coordinate volunteer hours, resources and project teams.", icon: "🤝", color: "#15803D", pinned: false, createdAt: now(365) },
 ];
 
-const messages: Array<Omit<Message, "replyToId" | "reactions" | "savedBy" | "editedAt" | "deleted" | "mentions" | "audio">> = [
+const roomToWrite = (r: Omit<Room, "allowAnonymous">): Room => ({
+  ...r,
+  allowAnonymous: r.id === "room-health",
+});
+
+const messages: Array<Omit<Message, "replyToId" | "reactions" | "savedBy" | "editedAt" | "deleted" | "mentions" | "audio" | "anonymous" | "sentAt" | "pending" | "failed">> = [
   { id: randomUUID(), roomId: "room-general", authorId: "admin-ama", authorName: "Ama Owusu", authorRegion: "greater-accra", text: "Medase for joining Adom Circle! Introduce yourself — tell us where you're from and what you love about Ghana. 🇬🇭", createdAt: now(10, 5) },
   { id: randomUUID(), roomId: "room-general", authorId: "m-kofi", authorName: "Kofi Mensah", authorRegion: "ashanti", text: "Kumasi here! Teacher by profession, youth mentor by calling. Happy to connect anyone with volunteering opportunities in Ashanti.", createdAt: now(10, 3) },
   { id: randomUUID(), roomId: "room-general", authorId: "m-yaw", authorName: "Yaw Adjei", authorRegion: "greater-accra", text: "From Toronto but Nsawam at heart. Looking to mentor young developers back home — the talent is unreal.", createdAt: now(9, 20) },
@@ -505,11 +512,13 @@ export async function seed() {
         followerCount: 0,
         savedMessages: [],
         status: "active",
+        verified: false,
+        merchantName: "",
       });
     }
   }
   if (roomCount.length === 0) {
-    for (const r of rooms) await roomKV.setItem(r.id, r);
+    for (const r of rooms) await roomKV.setItem(r.id, roomToWrite(r));
   }
   if (threadCount.length === 0) {
     for (const t of threads)
@@ -526,6 +535,10 @@ export async function seed() {
         deleted: false,
         mentions: [],
         audio: null,
+        anonymous: false,
+        sentAt: m.createdAt,
+        pending: false,
+        failed: false,
       });
     for (const r of reports) await reportKV.setItem(r.id, r);
   }

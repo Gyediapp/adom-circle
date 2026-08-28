@@ -15,12 +15,17 @@ export const RoomSchema = z.object({
   icon: z.string(),
   color: z.string(),
   pinned: z.boolean(),
+  allowAnonymous: z.boolean(),
   createdAt: z.string(),
 });
 
 export type Room = z.output<typeof RoomSchema>;
 
 export const roomKV = createKV<Room>("rooms");
+
+function normalizeRoom(r: Room): Room {
+  return { ...r, allowAnonymous: r.allowAnonymous ?? false };
+}
 
 // ---------- Messages ----------
 
@@ -35,6 +40,7 @@ export const MessageSchema = z.object({
   authorRegion: z.string(),
   text: z.string(),
   createdAt: z.string(),
+  sentAt: z.string(),
   replyToId: z.string().nullable(),
   reactions: z.record(z.string(), z.array(z.string())),
   savedBy: z.array(z.string()),
@@ -42,6 +48,9 @@ export const MessageSchema = z.object({
   deleted: z.boolean(),
   mentions: z.array(z.object({ id: z.string(), name: z.string() })),
   audio: z.string().nullable(),
+  anonymous: z.boolean(),
+  pending: z.boolean(),
+  failed: z.boolean(),
 });
 
 export type Message = z.output<typeof MessageSchema>;
@@ -59,6 +68,10 @@ function normalizeMessage(m: Message): Message {
     deleted: m.deleted ?? false,
     mentions: m.mentions ?? [],
     audio: m.audio ?? null,
+    anonymous: m.anonymous ?? false,
+    sentAt: m.sentAt ?? m.createdAt,
+    pending: m.pending ?? false,
+    failed: m.failed ?? false,
   };
 }
 
@@ -132,9 +145,9 @@ const getRooms = os.handler(async () => {
   const rooms = await roomKV.getAllItems();
   const messages = await messageKV.getAllItems();
   return rooms
-    .map((room) => ({
-      ...room,
-      messageCount: messages.filter((m) => m.roomId === room.id).length,
+    .map((r) => ({
+      ...normalizeRoom(r),
+      messageCount: messages.filter((m) => m.roomId === r.id).length,
     }))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || a.name.localeCompare(b.name));
 });
@@ -200,6 +213,7 @@ export const community = {
         description: z.string(),
         icon: z.string(),
         color: z.string(),
+        allowAnonymous: z.boolean().optional(),
       }),
     )
     .handler(async ({ input }) => {
@@ -211,10 +225,21 @@ export const community = {
         icon: input.icon,
         color: input.color,
         pinned: false,
+        allowAnonymous: input.allowAnonymous ?? false,
         createdAt: new Date().toISOString(),
       };
       await roomKV.setItem(room.id, room);
       return room;
+    }),
+  toggleAnonymous: os
+    .input(z.object({ adminId: z.string(), roomId: z.string() }))
+    .handler(async ({ input }) => {
+      await requireAdmin(input.adminId);
+      const room = await roomKV.getItem(input.roomId);
+      if (!room) throw new Error("Room not found");
+      const updated = { ...normalizeRoom(room), allowAnonymous: !room.allowAnonymous };
+      await roomKV.setItem(updated.id, updated);
+      return updated;
     }),
   togglePinRoom: os
     .input(z.object({ adminId: z.string(), roomId: z.string() }))
@@ -256,6 +281,8 @@ export const community = {
         replyToId: z.string().nullable().optional(),
         mentionIds: z.array(z.string()).max(10).optional(),
         audio: z.string().nullable().optional(),
+        anonymous: z.boolean().optional(),
+        confirmPending: z.string().optional(),
       }),
     )
     .handler(async ({ input }) => {
@@ -263,9 +290,12 @@ export const community = {
       if (input.audio && (!input.audio.startsWith("data:audio/") || input.audio.length > 600_000)) {
         throw new Error("Voice message is too large (max ~60 seconds)");
       }
+      // Anonymous posting — only allowed in rooms that opt in (Health & Welfare)
+      const room = await roomKV.getItem(input.roomId);
+      const roomNorm = room ? normalizeRoom(room) : null;
+      const anonymous = Boolean(input.anonymous) && Boolean(roomNorm?.allowAnonymous);
       // Resolve @mentions to member names and fan out notifications
       const mentions: { id: string; name: string }[] = [];
-      const room = await roomKV.getItem(input.roomId);
       for (const id of [...new Set(input.mentionIds ?? [])]) {
         if (id === member.id) continue;
         const target = await memberKV.getItem(id);
@@ -275,18 +305,20 @@ export const community = {
             target.id,
             "system",
             `${member.name} mentioned you`,
-            `In #${room?.name ?? "chat"}: ${input.text.trim().slice(0, 90)}`,
+            `In #${roomNorm?.name ?? "chat"}: ${input.text.trim().slice(0, 90)}`,
           ).catch(() => {});
         }
       }
+      const nowIso = new Date().toISOString();
       const message: Message = {
         id: randomUUID(),
         roomId: input.roomId,
-        authorId: member.id,
-        authorName: member.name,
-        authorRegion: member.region,
+        authorId: anonymous ? "anonymous" : member.id,
+        authorName: anonymous ? "Anonymous" : member.name,
+        authorRegion: anonymous ? "" : member.region,
         text: input.text.trim(),
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso,
+        sentAt: nowIso,
         replyToId: input.replyToId ?? null,
         reactions: {},
         savedBy: [],
@@ -294,8 +326,15 @@ export const community = {
         deleted: false,
         mentions,
         audio: input.audio ?? null,
+        anonymous,
+        pending: false,
+        failed: false,
       };
       await messageKV.setItem(message.id, message);
+      // If this confirms an optimistically-pending message, drop the pending copy
+      if (input.confirmPending && input.confirmPending !== message.id) {
+        await messageKV.removeItem(input.confirmPending).catch(() => {});
+      }
       await addPoints(member.id, POINTS.MESSAGE);
       return message;
     }),

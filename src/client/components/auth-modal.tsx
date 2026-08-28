@@ -17,7 +17,7 @@ export function AuthModal({
   onClose: () => void;
   onSwitchMode: (m: "login" | "signup") => void;
 }) {
-  const { signup, login, toast } = useStore();
+  const { signup, login, toast, setUser } = useStore();
   const { t } = useI18n();
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -110,6 +110,9 @@ export function AuthModal({
     try {
       await rpcClient.members.verifyEmail({ email, code: verifyCode });
       toast("Email verified! +10 points 🎉");
+      // Refresh the stored user so the "verify your email" banner disappears
+      const m = await rpcClient.members.byId(email ? (localStorage.getItem("adom_member_id") ?? "") : "");
+      if (m) setUser(m);
       onClose();
     } catch (e: any) {
       toast(e?.message ?? "Verification failed", "error");

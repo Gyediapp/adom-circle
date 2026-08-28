@@ -26,6 +26,7 @@ import {
   Pencil,
   ShieldBan,
   ShieldCheck,
+  BadgeCheck,
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
@@ -606,6 +607,12 @@ function MembersManager() {
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
+  const setVerified = useMutation(
+    queryClient.members.setVerified.mutationOptions({
+      onSuccess: () => toast("Verified business status updated"),
+      onError: (e: any) => toast(e?.message, "error"),
+    }),
+  );
   const adminUpdate = useMutation(
     queryClient.members.adminUpdateMember.mutationOptions({
       onSuccess: () => {
@@ -681,6 +688,11 @@ function MembersManager() {
                     <ShieldBan size={10} /> Suspended
                   </Chip>
                 )}
+                {(m as any).verified && (
+                  <Chip tone="green" className="px-2 py-0.5 text-[10px] uppercase">
+                    <CheckCircle2 size={10} /> Verified
+                  </Chip>
+                )}
               </div>
               <p className="truncate text-[12px] text-fg/45">
                 {m.email} · {GHANA_REGIONS.find((r) => r.id === m.region)?.name ?? m.region}
@@ -715,6 +727,26 @@ function MembersManager() {
                 className="w-20 rounded-xl border border-fg/15 bg-card px-2 py-1.5 text-xs outline-none focus:border-flag-gold"
                 title="Points"
               />
+              <button
+                onClick={() =>
+                  user &&
+                  setVerified.mutate({
+                    adminId: user.id,
+                    memberId: m.id,
+                    verified: !(m as any).verified,
+                    merchantName: (m as any).merchantName || (m as any).name,
+                  })
+                }
+                className={cn(
+                  "rounded-full p-2 cursor-pointer",
+                  (m as any).verified
+                    ? "text-flag-green hover:bg-flag-green/10"
+                    : "text-fg/30 hover:text-flag-green hover:bg-flag-green/10",
+                )}
+                title={(m as any).verified ? "Remove verified business badge" : "Mark as verified business"}
+              >
+                <BadgeCheck size={15} />
+              </button>
               <button
                 onClick={() => startEdit(m)}
                 className="rounded-full p-2 text-fg/30 hover:text-flag-green hover:bg-flag-green/5 cursor-pointer"

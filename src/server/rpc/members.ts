@@ -35,6 +35,8 @@ export const MemberSchema = z.object({
   followerCount: z.number(),
   savedMessages: z.array(z.string()),
   status: z.enum(["active", "suspended"]),
+  verified: z.boolean(),
+  merchantName: z.string(),
 });
 
 export type Member = z.output<typeof MemberSchema>;
@@ -48,6 +50,8 @@ export function normalizeMember(m: Member): Member {
     followerCount: m.followerCount ?? 0,
     savedMessages: m.savedMessages ?? [],
     status: m.status ?? "active",
+    verified: m.verified ?? false,
+    merchantName: m.merchantName ?? "",
   };
 }
 
@@ -362,6 +366,8 @@ export const members = {
         followerCount: 0,
         savedMessages: [],
         status: "active",
+        verified: false,
+        merchantName: "",
       };
       await memberKV.setItem(member.id, member);
       await sendEmail({
@@ -808,6 +814,28 @@ export const members = {
           ? "Your account has been suspended. Contact the administrators if you believe this is a mistake."
           : "Your account is active again. Welcome back!",
       ).catch(() => {});
+      return sanitizeMember(updated);
+    }),
+
+  setVerified: os
+    .input(
+      z.object({
+        adminId: z.string(),
+        memberId: z.string(),
+        verified: z.boolean(),
+        merchantName: z.string().max(80).optional(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      await requireAdmin(input.adminId);
+      const member = await memberKV.getItem(input.memberId);
+      if (!member) throw new Error("Member not found");
+      const updated = {
+        ...normalizeMember(member),
+        verified: input.verified,
+        merchantName: input.verified ? (input.merchantName ?? member.merchantName ?? "") : "",
+      };
+      await memberKV.setItem(updated.id, updated);
       return sanitizeMember(updated);
     }),
 };

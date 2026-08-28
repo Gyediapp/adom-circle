@@ -21,6 +21,8 @@ import {
   Pencil,
   Mic,
   Square,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
@@ -43,6 +45,22 @@ const REACTIONS: Array<{ type: ReactionType; emoji: string; label: string }> = [
   { type: "undecided", emoji: "🤔", label: "Undecided" },
 ];
 
+// Timezone-aware display: local time (viewer's clock) + Ghana time, e.g. "14:03 · Accra 13:03"
+function localTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const local = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const ghana = d.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Africa/Accra",
+    });
+    return ghana === local ? local : `${local} · Accra ${ghana}`;
+  } catch {
+    return "";
+  }
+}
+
 export function Community() {
   const { user, toast, requireUser } = useStore();
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -58,6 +76,18 @@ export function Community() {
   const [editText, setEditText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+  // Optimistic send queue — pending messages appear instantly, retried on failure
+  const [pendingMsgs, setPendingMsgs] = useState<
+    Array<ChatMsg & { failed?: boolean }>
+  >([]);
+  const pendingRef = useRef(pendingMsgs);
+  pendingRef.current = pendingMsgs;
+  // Cache of author metadata (verified badge) by member id
+  const authorsById = useRef(new Map<string, { verified?: boolean; merchantName?: string }>());
+  // Anonymous posting (Health & Welfare)
+  const [anonymous, setAnonymous] = useState(false);
+  // Audio-only mode toggle (General)
+  const [audioOnly, setAudioOnly] = useState(false);
   // @mentions
   const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -104,20 +134,108 @@ export function Community() {
     }),
   );
 
+  // Cache author metadata (verified badge) for message authors
+  useEffect(() => {
+    const ids = new Set<string>();
+    for (const m of messages ?? []) if (m.authorId !== "anonymous") ids.add(m.authorId);
+    for (const id of ids) {
+      if (authorsById.current.has(id)) continue;
+      rpcClient.members
+        .byId(id)
+        .then((m) => {
+          if (m) authorsById.current.set(id, { verified: m.verified, merchantName: m.merchantName });
+        })
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
+
+  // Optimistic send: append a pending copy instantly, persist in the background,
+  // and reconcile once the server confirms (drop the pending copy).
   const sendMessage = useMutation(
     queryClient.community.sendMessage.mutationOptions({
-      onSuccess: () => {
+      onSuccess: (saved, vars) => {
         setText("");
         setReplyingTo(null);
         setMentionIds([]);
         setAudioData(null);
+        setAnonymous(false);
+        setPendingMsgs((q) => q.filter((p) => p.id !== (vars.confirmPending ?? "__none__")));
         requestAnimationFrame(() =>
           chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" }),
         );
       },
-      onError: (e: any) => toast(e?.message ?? "Failed to send", "error"),
+      onError: (e: any, vars) => {
+        setPendingMsgs((q) =>
+          q.map((p) =>
+            p.id === (vars.confirmPending ?? "__none__") ? { ...p, failed: true } : p,
+          ),
+        );
+        toast(e?.message ?? "Failed to send — tap the message to retry", "error");
+      },
     }),
   );
+
+  const submitMessage = () => {
+    if (!me) return toast("Sign in to join the conversation", "error");
+    if (!activeRoom) return;
+    if (!text.trim() && !audioData) return;
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const nowIso = new Date().toISOString();
+    const pending: ChatMsg & { failed?: boolean } = {
+      id: pendingId,
+      roomId: activeRoom.id,
+      authorId: anonymous ? "anonymous" : me.id,
+      authorName: anonymous ? "Anonymous" : me.name,
+      authorRegion: anonymous ? "" : me.region,
+      text: text.trim(),
+      createdAt: nowIso,
+      sentAt: nowIso,
+      replyToId: replyingTo?.id ?? null,
+      reactions: {},
+      savedBy: [],
+      editedAt: null,
+      deleted: false,
+      mentions: [],
+      audio: audioData,
+      anonymous,
+      pending: true,
+      failed: false,
+      authorPoints: me.points,
+      authorRole: me.role,
+    };
+    setPendingMsgs((q) => [...q, pending]);
+    sendMessage.mutate({
+      memberId: me.id,
+      roomId: activeRoom.id,
+      text: text.trim(),
+      replyToId: replyingTo?.id ?? null,
+      mentionIds,
+      audio: audioData,
+      anonymous,
+      confirmPending: pendingId,
+    });
+  };
+
+  // Tap-to-retry — resend a failed pending message
+  const retryPending = (pendingId: string) => {
+    const p = pendingRef.current.find((m) => m.id === pendingId);
+    if (!p || !me || !activeRoom) return;
+    setPendingMsgs((q) =>
+      q.map((m) => (m.id === pendingId ? { ...m, failed: false, pending: true } : m)),
+    );
+    sendMessage.mutate({
+      memberId: me.id,
+      roomId: activeRoom.id,
+      text: p.text,
+      replyToId: p.replyToId,
+      mentionIds: p.mentions?.map((m) => m.id) ?? [],
+      audio: p.audio,
+      anonymous: p.anonymous,
+      confirmPending: pendingId,
+    });
+  };
+
   const react = useMutation(
     queryClient.community.addReaction.mutationOptions({
       onError: (e: any) => toast(e?.message ?? "Failed", "error"),
@@ -219,20 +337,6 @@ export function Community() {
 
   const me = requireUser();
 
-  const submitMessage = () => {
-    if (!me) return toast("Sign in to join the conversation", "error");
-    if (!activeRoom) return;
-    if (!text.trim() && !audioData) return;
-    sendMessage.mutate({
-      memberId: me.id,
-      roomId: activeRoom.id,
-      text: text.trim(),
-      replyToId: replyingTo?.id ?? null,
-      mentionIds,
-      audio: audioData,
-    });
-  };
-
   // @mention autocomplete
   const handleComposerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
@@ -303,7 +407,19 @@ export function Community() {
 
   // Message threading: nest replies up to 2 levels by indentation; deeper
   // replies flatten with an inline "in reply to" chip so phones stay readable.
-  const msgList = useMemo<ChatMsg[]>(() => messages ?? [], [messages]);
+  const msgList = useMemo<ChatMsg[]>(() => {
+    const server = messages ?? [];
+    // Merge pending (optimistic) messages on top; drop pending copies the server confirmed
+    const pendingIds = new Set(pendingMsgs.map((p) => p.id));
+    const serverIds = new Set(server.map((m) => m.id));
+    const merged = [...server];
+    for (const p of pendingMsgs) {
+      if (!serverIds.has(p.id)) merged.push(p as ChatMsg);
+    }
+    return merged
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .filter((m) => !pendingIds.has(m.id) || pendingMsgs.some((p) => p.id === m.id));
+  }, [messages, pendingMsgs]);
   const msgById = useMemo(() => new Map(msgList.map((m) => [m.id, m])), [msgList]);
   const replyDepth = (m: Message): number => {
     let depth = 0;
@@ -434,53 +550,64 @@ export function Community() {
                     Start the conversation in {activeRoom.name} 💬
                   </div>
                 )}
-                {msgList.map((m) => (
-                  <ChatMessage
-                    key={m.id}
-                    m={m}
-                    me={me}
-                    depth={replyDepth(m)}
-                    parentName={m.replyToId ? msgById.get(m.replyToId)?.authorName ?? null : null}
-                    followed={followed.has(m.authorId)}
-                    canModerate={
-                      !!me &&
-                      (me.role === "admin" ||
-                        (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
-                    }
-                    onReact={(type) => me && react.mutate({ memberId: me.id, messageId: m.id, type })}
-                    onReply={() => {
-                      if (!me) return toast("Sign in to reply", "error");
-                      setReplyingTo({ id: m.id, name: m.authorName });
-                      chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
-                    }}
-                    onSave={() => me && saveMsg.mutate({ memberId: me.id, messageId: m.id })}
-                    onShare={() => shareMessage(m)}
-                    onFollow={() => me && follow.mutate({ memberId: me.id, targetId: m.authorId })}
-                    onDm={() => openDm(m)}
-                    onEdit={() => {
-                      setEditingId(m.id);
-                      setEditText(m.text);
-                    }}
-                    onDelete={() => {
-                      if (confirmingDelete === m.id) {
-                        me && deleteMsg.mutate({ memberId: me.id, messageId: m.id });
-                      } else {
-                        setConfirmingDelete(m.id);
-                        setTimeout(() => setConfirmingDelete((cur) => (cur === m.id ? null : cur)), 3000);
+                {msgList.map((m) => {
+                  const authorInfo =
+                    m.authorId !== "anonymous"
+                      ? (authorsById.current?.get(m.authorId) as
+                          | { verified?: boolean; merchantName?: string }
+                          | undefined)
+                      : undefined;
+                  const pendingCopy = pendingMsgs.find((p) => p.id === m.id);
+                  return (
+                    <ChatMessage
+                      key={m.id}
+                      m={m}
+                      me={me}
+                      depth={replyDepth(m)}
+                      parentName={m.replyToId ? msgById.get(m.replyToId)?.authorName ?? null : null}
+                      followed={followed.has(m.authorId)}
+                      canModerate={
+                        !!me &&
+                        (me.role === "admin" ||
+                          (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
                       }
-                    }}
-                    editing={editingId === m.id}
-                    editText={editText}
-                    onEditTextChange={setEditText}
-                    onEditSave={() => me && editMsg.mutate({ memberId: me.id, messageId: m.id, text: editText })}
-                    onEditCancel={() => {
-                      setEditingId(null);
-                      setEditText("");
-                    }}
-                    confirmingDelete={confirmingDelete === m.id}
-                    onReport={() => setReportTarget({ type: "message", label: `${m.authorName}: "${m.text.slice(0, 40)}…"` })}
-                  />
-                ))}
+                      verified={Boolean(authorInfo?.verified)}
+                      onReact={(type) => me && react.mutate({ memberId: me.id, messageId: m.id, type })}
+                      onReply={() => {
+                        if (!me) return toast("Sign in to reply", "error");
+                        setReplyingTo({ id: m.id, name: m.authorName });
+                        chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
+                      }}
+                      onSave={() => me && saveMsg.mutate({ memberId: me.id, messageId: m.id })}
+                      onShare={() => shareMessage(m)}
+                      onFollow={() => me && follow.mutate({ memberId: me.id, targetId: m.authorId })}
+                      onDm={() => openDm(m)}
+                      onEdit={() => {
+                        setEditingId(m.id);
+                        setEditText(m.text);
+                      }}
+                      onDelete={() => {
+                        if (confirmingDelete === m.id) {
+                          me && deleteMsg.mutate({ memberId: me.id, messageId: m.id });
+                        } else {
+                          setConfirmingDelete(m.id);
+                          setTimeout(() => setConfirmingDelete((cur) => (cur === m.id ? null : cur)), 3000);
+                        }
+                      }}
+                      editing={editingId === m.id}
+                      editText={editText}
+                      onEditTextChange={setEditText}
+                      onEditSave={() => me && editMsg.mutate({ memberId: me.id, messageId: m.id, text: editText })}
+                      onEditCancel={() => {
+                        setEditingId(null);
+                        setEditText("");
+                      }}
+                      confirmingDelete={confirmingDelete === m.id}
+                      onReport={() => setReportTarget({ type: "message", label: `${m.authorName}: "${m.text.slice(0, 40)}…"` })}
+                      onRetry={pendingCopy?.failed ? () => retryPending(m.id) : undefined}
+                    />
+                  );
+                })}
               </div>
 
               <div className="border-t border-fg/8 bg-card p-3.5">
@@ -569,6 +696,35 @@ export function Community() {
                   >
                     {sendMessage.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                   </Button>
+                </div>
+                {/* Room mode toggles */}
+                <div className="mt-2 flex flex-wrap items-center gap-3 px-1">
+                  {activeRoom.allowAnonymous && me && (
+                    <button
+                      onClick={() => setAnonymous(!anonymous)}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors cursor-pointer",
+                        anonymous
+                          ? "border-flag-red bg-flag-red text-cream"
+                          : "border-fg/15 text-fg/50 hover:border-flag-red hover:text-flag-red",
+                      )}
+                      title="Post without showing your name"
+                    >
+                      <UserPlus size={11} /> {anonymous ? "Posting anonymously" : "Post anonymously"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setAudioOnly(!audioOnly)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors cursor-pointer",
+                      audioOnly
+                        ? "border-flag-green bg-flag-green text-cream"
+                        : "border-fg/15 text-fg/50 hover:border-flag-green hover:text-flag-green",
+                    )}
+                    title="Data saver — hide images & emojis, keep text and voice"
+                  >
+                    <Mic size={11} /> {audioOnly ? "Audio mode on" : "Audio mode"}
+                  </button>
                 </div>
               </div>
             </Card>
@@ -707,6 +863,8 @@ function ChatMessage({
   onEditCancel,
   confirmingDelete,
   onReport,
+  onRetry,
+  verified,
 }: {
   m: ChatMsg;
   me: PublicMember | null;
@@ -729,6 +887,8 @@ function ChatMessage({
   onEditCancel: () => void;
   confirmingDelete: boolean;
   onReport: () => void;
+  onRetry?: () => void;
+  verified?: boolean;
 }) {
   const mine = m.authorId === me?.id;
   const reactions = m.reactions ?? {};
@@ -736,17 +896,31 @@ function ChatMessage({
   const hasReactions = Object.keys(reactions).length > 0;
   const indent = Math.min(depth, 2) * 44;
   const deleted = m.deleted;
+  const pending = m.pending || m.failed;
+  const displayName = m.anonymous ? "Anonymous" : m.authorName;
 
   return (
     <div className={cn("group", mine && "flex flex-col items-end")} style={{ marginLeft: mine ? 0 : indent }}>
       <div className={cn("flex gap-3", mine && "flex-row-reverse")}>
-        <Avatar name={m.authorName} size={34} />
+        <Avatar name={m.anonymous ? "Anonymous" : m.authorName} size={34} />
         <div className={cn("max-w-[78%] sm:max-w-[70%]", mine && "text-right")}>
           <div className={cn("mb-1 flex items-center gap-2 flex-wrap", mine && "justify-end")}>
-            <span className="text-[12px] font-bold">{m.authorName}</span>
-            <RankChip points={m.authorPoints} role={m.authorRole} />
+            <span className="text-[12px] font-bold">{displayName}</span>
+            {m.anonymous && (
+              <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] font-semibold text-fg/50 uppercase tracking-wide">
+                anonymous
+              </span>
+            )}
+            {verified && (
+              <span className="flex items-center gap-0.5 rounded-full bg-flag-green/10 px-2 py-0.5 text-[10px] font-bold text-flag-green">
+                <CheckCircle2 size={10} /> Verified business
+              </span>
+            )}
+            {!m.anonymous && <RankChip points={m.authorPoints} role={m.authorRole} />}
             <span className="text-[10px] text-fg/40">
-              {regionName(m.authorRegion)} · {timeAgo(m.createdAt)}
+              {!m.anonymous && regionName(m.authorRegion) ? `${regionName(m.authorRegion)} · ` : ""}
+              {/* Timezone-aware: show local time + Ghana (GMT) time */}
+              {localTime(m.sentAt)}
               {m.editedAt && !deleted && <span className="ml-1 italic text-fg/30">· edited</span>}
             </span>
           </div>
@@ -789,6 +963,7 @@ function ChatMessage({
               className={cn(
                 "inline-block rounded-2xl px-4 py-2.5 text-left text-sm leading-relaxed",
                 mine ? "bg-ink text-cream rounded-br-sm" : "bg-card border border-fg/5 rounded-bl-sm",
+                (m.pending || m.failed) && "opacity-70",
               )}
             >
               {m.audio && (
@@ -800,11 +975,24 @@ function ChatMessage({
                 />
               )}
               {m.text && <MentionText text={m.text} mentions={m.mentions ?? []} />}
+              {m.pending && (
+                <span className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-fg/50">
+                  <Loader2 size={11} className="animate-spin" /> sending…
+                </span>
+              )}
+              {m.failed && (
+                <button
+                  onClick={onRetry}
+                  className="mt-1.5 flex items-center gap-1.5 rounded-full bg-flag-red/10 px-2.5 py-1 text-[11px] font-bold text-flag-red hover:bg-flag-red/20 cursor-pointer"
+                >
+                  <RefreshCw size={11} /> Tap to retry
+                </button>
+              )}
             </div>
           )}
 
           {/* Reactions + actions */}
-          {!deleted && (
+          {!deleted && !pending && (
             <div className={cn("mt-1.5 flex flex-wrap items-center gap-1", mine && "justify-end")}>
               {REACTIONS.map((r) => {
                 const ids = reactions[r.type] ?? [];
