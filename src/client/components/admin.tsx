@@ -1174,9 +1174,14 @@ function ModerationPanel() {
       <Card className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-fg/8 p-4">
           <p className="text-sm font-bold">Reports ({reports?.filter((r) => r.status === "open").length ?? 0} open)</p>
-          <Chip tone={overview && overview.counts.openReports > 0 ? "red" : "green"}>
-            {overview && overview.counts.openReports > 0 ? `${overview.counts.openReports} need review` : "All clear"}
-          </Chip>
+          <div className="flex items-center gap-2">
+            <Chip tone={overview?.aiModerationLive ? "green" : "sand"}>
+              {overview?.aiModerationLive ? "AI moderation on" : "Local filter only"}
+            </Chip>
+            <Chip tone={overview && overview.counts.openReports > 0 ? "red" : "green"}>
+              {overview && overview.counts.openReports > 0 ? `${overview.counts.openReports} need review` : "All clear"}
+            </Chip>
+          </div>
         </div>
         <div className="divide-y divide-fg/5">
           {(reports ?? []).slice(0, 10).map((r) => (

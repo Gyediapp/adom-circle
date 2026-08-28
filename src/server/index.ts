@@ -226,3 +226,72 @@ if (process.env.NODE_ENV === "production" && process.env.ADOM_SKIP_SERVE !== "1"
     console.log(`Adom Circle running on http://0.0.0.0:${info.port}`);
   });
 }
+
+// Daily inspirational post — injects a scriptural/values quote into the
+// Faith & Values room every morning (6:00 GMT). Runs in production only.
+const INSPIRATIONS = [
+  "“The fear of the Lord is the beginning of wisdom.” — Proverbs 9:10",
+  "“Let us not become weary in doing good.” — Galatians 6:9",
+  "“Blessed are the peacemakers.” — Matthew 5:9",
+  "“In everything, do to others what you would have them do to you.” — Matthew 7:12",
+  "“Where there is no vision, the people perish.” — Proverbs 29:18",
+  "“Love your neighbour as yourself.” — Mark 12:31",
+  "“Be strong and courageous. Do not be afraid.” — Joshua 1:9",
+  "“Commit your work to the Lord, and your plans will be established.” — Proverbs 16:3",
+  "“Let your light shine before others.” — Matthew 5:16",
+  "“Ghana, our motherland — serve her with all your heart.” — Adom Circle",
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+async function postDailyInspiration(): Promise<void> {
+  try {
+    const { messageKV, roomKV } = await import("./rpc/community");
+    const rooms = await roomKV.getAllItems();
+    const valuesRoom = rooms.find((r) => r.id === "room-values");
+    if (!valuesRoom) return;
+    const dayIndex = Math.floor(Date.now() / DAY_MS);
+    const quote = INSPIRATIONS[dayIndex % INSPIRATIONS.length];
+    const nowIso = new Date().toISOString();
+    await messageKV.setItem(`inspiration-${dayIndex}`, {
+      id: `inspiration-${dayIndex}`,
+      roomId: "room-values",
+      authorId: "adom-circle",
+      authorName: "Adom Circle",
+      authorRegion: "greater-accra",
+      text: `🌅 Good morning, Circle. Today's reflection:\n\n${quote}\n\nMay it guide your day. 🇬🇭`,
+      createdAt: nowIso,
+      sentAt: nowIso,
+      replyToId: null,
+      reactions: {},
+      savedBy: [],
+      editedAt: null,
+      deleted: false,
+      mentions: [],
+      audio: null,
+      anonymous: false,
+      pending: false,
+      failed: false,
+    });
+    console.log("Daily inspiration posted");
+  } catch (err) {
+    console.error("Daily inspiration failed:", err);
+  }
+}
+
+// Fire once shortly after boot, then daily. The timestamp key ensures one post
+// per day even if the server restarts (idempotent).
+if (process.env.NODE_ENV === "production") {
+  const schedule = () => {
+    const now = new Date();
+    const next = new Date(now);
+    next.setUTCHours(6, 0, 0, 0);
+    if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+    const delay = next.getTime() - now.getTime();
+    setTimeout(async () => {
+      await postDailyInspiration();
+      schedule();
+    }, delay);
+  };
+  schedule();
+}

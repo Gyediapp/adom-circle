@@ -53,6 +53,7 @@ export const admin = {
 
       return {
         emailLive: Boolean(process.env.RESEND_API_KEY),
+        aiModerationLive: Boolean(process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY),
         counts: {
           members: members.length,
           posts: posts.length,

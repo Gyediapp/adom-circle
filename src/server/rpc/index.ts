@@ -7,6 +7,7 @@ import { notifications } from "./notifications";
 import { emails } from "./emails";
 import { admin } from "./admin";
 import { dms } from "./dms";
+import { polls } from "./polls";
 import { seed } from "./seed";
 
 // Populate demo data on first boot
@@ -23,4 +24,5 @@ export const router = {
   emails,
   admin,
   dms,
+  polls,
 };

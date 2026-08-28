@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => {
     process.env = env;
   }
   return {
+    server: {
+      hmr: { overlay: false },
+    },
     plugins: [
       react(),
       tailwindcss(),

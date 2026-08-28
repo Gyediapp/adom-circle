@@ -34,6 +34,7 @@ import type { Message, ReactionType } from "@/server/rpc/community";
 import type { PublicMember } from "@/server/rpc/members";
 import { DmModal } from "./dm-modal";
 import { ShareModal, type ShareTarget } from "./share-modal";
+import { BarChart3, Kanban } from "lucide-react";
 
 type ChatMsg = Message & { authorPoints: number; authorRole: string };
 
@@ -131,6 +132,13 @@ export function Community() {
     queryClient.community.liveMessages.byRoom.experimental_liveOptions({
       input: { roomId: activeRoom?.id ?? "" },
       enabled: !!activeRoom,
+    }),
+  );
+
+  const { data: polls } = useQuery(
+    queryClient.polls.list.queryOptions({
+      input: { roomId: activeRoom?.id ?? "" },
+      enabled: !!activeRoom && activeRoom.id === "room-civic",
     }),
   );
 
@@ -334,6 +342,57 @@ export function Community() {
       },
     }),
   );
+  const votePoll = useMutation(
+    queryClient.polls.vote.mutationOptions({
+      onSuccess: () => toast("Vote recorded"),
+      onError: (e: any) => toast(e?.message ?? "Failed to vote", "error"),
+    }),
+  );
+  const createPoll = useMutation(
+    queryClient.polls.create.mutationOptions({
+      onSuccess: () => {
+        toast("Poll created");
+        setPollOpen(false);
+        setPollQuestion("");
+        setPollOptions(["", ""]);
+      },
+      onError: (e: any) => toast(e?.message ?? "Failed to create poll", "error"),
+    }),
+  );
+  const createTask = useMutation(
+    queryClient.projects.createTask.mutationOptions({
+      onSuccess: () => {
+        setNewTaskTitle("");
+        toast("Task added");
+      },
+      onError: (e: any) => toast(e?.message ?? "Failed to add task", "error"),
+    }),
+  );
+  const moveTask = useMutation(
+    queryClient.projects.moveTask.mutationOptions({
+      onError: (e: any) => toast(e?.message ?? "Failed to move task", "error"),
+    }),
+  );
+  const deleteTask = useMutation(
+    queryClient.projects.deleteTask.mutationOptions({
+      onSuccess: () => toast("Task removed"),
+      onError: (e: any) => toast(e?.message ?? "Failed", "error"),
+    }),
+  );
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [myVote, setMyVote] = useState<Record<string, number>>({});
+  const [pollVotes, setPollVotes] = useState<Record<string, number[]>>({});
+  // Kanban (Projects & Volunteering room)
+  const [kanbanOpen, setKanbanOpen] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const { data: tasks } = useQuery(
+    queryClient.projects.liveTasks.list.experimental_liveOptions({
+      input: { projectId: activeRoom?.id ?? "" },
+      enabled: !!activeRoom && activeRoom.id === "room-projects" && kanbanOpen,
+    }),
+  );
 
   const me = requireUser();
 
@@ -532,6 +591,136 @@ export function Community() {
 
         {/* Main panel */}
         <div ref={panelRef} className="scroll-mt-32">
+          {view === "chat" && activeRoom && activeRoom.id === "room-projects" && (
+            <div className="mb-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-fg/50">
+                  <Kanban size={13} className="text-flag-green" /> Task board
+                </p>
+                {me && (
+                  <button
+                    onClick={() => setKanbanOpen(!kanbanOpen)}
+                    className="rounded-full border border-fg/15 px-3 py-1 text-[11px] font-bold text-fg/60 hover:border-flag-green hover:text-flag-green transition-colors cursor-pointer"
+                  >
+                    {kanbanOpen ? "Hide board" : "Show board"}
+                  </button>
+                )}
+              </div>
+
+              {kanbanOpen && (
+                <Card className="p-4">
+                  <div className="mb-3 flex gap-2">
+                    <input
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newTaskTitle.trim().length >= 2 && me) {
+                          createTask.mutate({
+                            memberId: me.id,
+                            projectId: activeRoom.id,
+                            title: newTaskTitle.trim(),
+                          });
+                        }
+                      }}
+                      placeholder="Add a task — e.g. Collect donations for school supplies"
+                      className="flex-1 rounded-xl border border-fg/15 bg-card px-3 py-2 text-sm outline-none focus:border-flag-green"
+                    />
+                    <Button
+                      variant="dark"
+                      className="rounded-xl px-4 py-2 text-xs"
+                      disabled={newTaskTitle.trim().length < 2 || !me}
+                      onClick={() =>
+                        me &&
+                        createTask.mutate({
+                          memberId: me.id,
+                          projectId: activeRoom.id,
+                          title: newTaskTitle.trim(),
+                        })
+                      }
+                    >
+                      Add
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {(
+                      [
+                        ["todo", "To do", "border-fg/15"],
+                        ["doing", "In progress", "border-flag-gold/60"],
+                        ["done", "Done", "border-flag-green/60"],
+                      ] as Array<[string, string, string]>
+                    ).map(([status, label, border]) => {
+                      const colTasks = (tasks ?? []).filter((t) => t.status === status);
+                      return (
+                        <div key={status} className={`rounded-2xl border ${border} bg-soft/40 p-2.5`}>
+                          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-fg/50">
+                            {label} <span className="text-fg/30">({colTasks.length})</span>
+                          </p>
+                          <div className="space-y-2">
+                            {colTasks.map((t) => (
+                              <div key={t.id} className="group rounded-xl bg-card p-2.5 shadow-sm">
+                                <p className="text-[13px] font-semibold leading-snug">{t.title}</p>
+                                <div className="mt-2 flex items-center justify-between">
+                                  <div className="flex gap-1">
+                                    {status !== "todo" && (
+                                      <button
+                                        onClick={() =>
+                                          me &&
+                                          moveTask.mutate({
+                                            memberId: me.id,
+                                            taskId: t.id,
+                                            status: status === "done" ? "doing" : "todo",
+                                          })
+                                        }
+                                        className="rounded-full bg-soft px-2 py-0.5 text-[10px] font-bold text-fg/50 hover:text-fg cursor-pointer"
+                                        title="Move back"
+                                      >
+                                        ←
+                                      </button>
+                                    )}
+                                    {status !== "done" && (
+                                      <button
+                                        onClick={() =>
+                                          me &&
+                                          moveTask.mutate({
+                                            memberId: me.id,
+                                            taskId: t.id,
+                                            status: status === "todo" ? "doing" : "done",
+                                          })
+                                        }
+                                        className="rounded-full bg-soft px-2 py-0.5 text-[10px] font-bold text-fg/50 hover:text-fg cursor-pointer"
+                                        title="Move forward"
+                                      >
+                                        →
+                                      </button>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => me && deleteTask.mutate({ memberId: me.id, taskId: t.id })}
+                                    className="rounded-full p-1 text-fg/25 hover:text-flag-red cursor-pointer"
+                                    title="Delete task"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                            {colTasks.length === 0 && (
+                              <p className="py-3 text-center text-[11px] text-fg/35">No tasks</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3 text-[11px] text-fg/40">
+                    Live task board — changes sync across members instantly.
+                  </p>
+                </Card>
+              )}
+            </div>
+          )}
+
           {view === "chat" && activeRoom && (
             <Card className="flex h-[72vh] flex-col overflow-hidden">
               <div className="flex items-center justify-between border-b border-fg/8 px-5 py-3.5">

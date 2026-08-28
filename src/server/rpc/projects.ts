@@ -48,6 +48,33 @@ export type Contribution = z.output<typeof ContributionSchema>;
 
 export const contributionKV = createKV<Contribution>("contributions");
 
+// ---------- Project tasks (kanban) ----------
+
+export const TASK_STATUSES = ["todo", "doing", "done"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TaskSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  title: z.string(),
+  assignee: z.string(), // member id or "" for unassigned
+  status: z.enum(TASK_STATUSES),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type Task = z.output<typeof TaskSchema>;
+
+export const taskKV = createKV<Task>("tasks");
+
+function normalizeTask(t: Task): Task {
+  return {
+    ...t,
+    assignee: t.assignee ?? "",
+    status: t.status ?? "todo",
+  };
+}
+
 const getProjects = os.handler(async () => {
   return (await projectKV.getAllItems()).sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
@@ -61,6 +88,13 @@ const getProject = os.input(z.string()).handler(async ({ input }) => {
     .filter((c) => c.projectId === input)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return { project, contributions };
+});
+
+const getTasks = os.input(z.object({ projectId: z.string() })).handler(async ({ input }) => {
+  return (await taskKV.getAllItems())
+    .filter((t) => t.projectId === input.projectId)
+    .map(normalizeTask)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 });
 
 export const projects = {
@@ -168,5 +202,104 @@ export const projects = {
       await projectKV.setItem(project.id, updated);
       await addPoints(member.id, POINTS.CONTRIBUTION);
       return contribution;
+    }),
+
+  // ----- Kanban tasks -----
+
+  getTasks,
+
+  liveTasks: {
+    list: os
+      .input(z.object({ projectId: z.string() }))
+      .handler(async function* ({ input, signal }) {
+        yield call(getTasks, { projectId: input.projectId }, { signal });
+        for await (const _ of taskKV.subscribe()) {
+          yield call(getTasks, { projectId: input.projectId }, { signal });
+        }
+      }),
+  },
+
+  createTask: os
+    .input(
+      z.object({
+        memberId: z.string(),
+        projectId: z.string(),
+        title: z.string().min(2).max(200),
+        assignee: z.string().optional(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const { memberKV } = await import("./members");
+      const member = await memberKV.getItem(input.memberId);
+      if (!member) throw new Error("Member not found. Please sign in.");
+      const project = await projectKV.getItem(input.projectId);
+      if (!project) throw new Error("Project not found");
+      const now = new Date().toISOString();
+      const task: Task = {
+        id: randomUUID(),
+        projectId: input.projectId,
+        title: input.title.trim(),
+        assignee: input.assignee ?? "",
+        status: "todo",
+        createdAt: now,
+        updatedAt: now,
+      };
+      await taskKV.setItem(task.id, task);
+      return task;
+    }),
+
+  moveTask: os
+    .input(
+      z.object({
+        memberId: z.string(),
+        taskId: z.string(),
+        status: z.enum(TASK_STATUSES),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const { memberKV } = await import("./members");
+      const member = await memberKV.getItem(input.memberId);
+      if (!member) throw new Error("Member not found. Please sign in.");
+      const raw = await taskKV.getItem(input.taskId);
+      if (!raw) throw new Error("Task not found");
+      const updated: Task = {
+        ...normalizeTask(raw),
+        status: input.status,
+        updatedAt: new Date().toISOString(),
+      };
+      await taskKV.setItem(updated.id, updated);
+      return updated;
+    }),
+
+  assignTask: os
+    .input(
+      z.object({
+        memberId: z.string(),
+        taskId: z.string(),
+        assignee: z.string(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const { memberKV } = await import("./members");
+      const member = await memberKV.getItem(input.memberId);
+      if (!member) throw new Error("Member not found. Please sign in.");
+      const raw = await taskKV.getItem(input.taskId);
+      if (!raw) throw new Error("Task not found");
+      const updated: Task = {
+        ...normalizeTask(raw),
+        assignee: input.assignee,
+        updatedAt: new Date().toISOString(),
+      };
+      await taskKV.setItem(updated.id, updated);
+      return updated;
+    }),
+
+  deleteTask: os
+    .input(z.object({ memberId: z.string(), taskId: z.string() }))
+    .handler(async ({ input }) => {
+      const { memberKV } = await import("./members");
+      const member = await memberKV.getItem(input.memberId);
+      if (!member) throw new Error("Member not found. Please sign in.");
+      await taskKV.removeItem(input.taskId);
     }),
 };

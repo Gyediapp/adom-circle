@@ -290,6 +290,31 @@ export const community = {
       if (input.audio && (!input.audio.startsWith("data:audio/") || input.audio.length > 600_000)) {
         throw new Error("Voice message is too large (max ~60 seconds)");
       }
+      // Content moderation — free local filter always on; AI when configured
+      const { localFilter, aiModerate } = await import("../lib/moderation");
+      const local = localFilter(input.text);
+      let mod = local;
+      if (local.flagged) {
+        const ai = await aiModerate(input.text);
+        if (ai) mod = ai;
+      }
+      if (mod.blocked) {
+        throw new Error("This message was blocked by our content guidelines.");
+      }
+      // Log flagged messages for admin review
+      if (mod.flagged) {
+        const { reportKV } = await import("./community");
+        const reportId = randomUUID();
+        await reportKV.setItem(reportId, {
+          id: reportId,
+          targetType: "message",
+          targetLabel: `${member.name}: "${input.text.trim().slice(0, 60)}…"`,
+          reason: `auto-flag: ${mod.reasons.join(", ")}`,
+          reporter: "auto-moderation",
+          status: "open",
+          createdAt: new Date().toISOString(),
+        });
+      }
       // Anonymous posting — only allowed in rooms that opt in (Health & Welfare)
       const room = await roomKV.getItem(input.roomId);
       const roomNorm = room ? normalizeRoom(room) : null;
@@ -466,6 +491,17 @@ export const community = {
     )
     .handler(async ({ input }) => {
       const member = await requireMember(input.memberId);
+      // Content moderation
+      const { localFilter, aiModerate } = await import("../lib/moderation");
+      const local = localFilter(`${input.title} ${input.body}`);
+      let mod = local;
+      if (local.flagged) {
+        const ai = await aiModerate(`${input.title} ${input.body}`);
+        if (ai) mod = ai;
+      }
+      if (mod.blocked) {
+        throw new Error("This discussion was blocked by our content guidelines.");
+      }
       const thread: Thread = {
         id: randomUUID(),
         roomId: input.roomId,
@@ -492,6 +528,17 @@ export const community = {
     )
     .handler(async ({ input }) => {
       const member = await requireMember(input.memberId);
+      // Content moderation
+      const { localFilter, aiModerate } = await import("../lib/moderation");
+      const local = localFilter(input.text);
+      let mod = local;
+      if (local.flagged) {
+        const ai = await aiModerate(input.text);
+        if (ai) mod = ai;
+      }
+      if (mod.blocked) {
+        throw new Error("This reply was blocked by our content guidelines.");
+      }
       const reply: Reply = {
         id: randomUUID(),
         threadId: input.threadId,
