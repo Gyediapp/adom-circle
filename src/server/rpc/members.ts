@@ -370,14 +370,14 @@ export const members = {
         merchantName: "",
       };
       await memberKV.setItem(member.id, member);
-      await sendEmail({
+      const sent = await sendEmail({
         to: member.email,
         subject: "Verify your Adom Circle email",
         body: `Your verification code is: ${code}\n\nEnter it on the site to activate your account. It expires in 24 hours.`,
         debugCode: code,
       });
       await recordAttempt(`signup:${input.email.toLowerCase()}`);
-      return { member: sanitizeMember(member), devCode: code };
+      return { member: sanitizeMember(member), devCode: sent.debugCode };
     }),
 
   login: os
@@ -467,13 +467,13 @@ export const members = {
         verifyExpires: new Date(Date.now() + CODE_TTL_MS).toISOString(),
       };
       await memberKV.setItem(updated.id, updated);
-      await sendEmail({
+      const sent = await sendEmail({
         to: updated.email,
         subject: "Verify your Adom Circle email (new code)",
         body: `Your new verification code is: ${code}\n\nIt expires in 24 hours.`,
         debugCode: code,
       });
-      return { devCode: code };
+      return { devCode: sent.debugCode };
     }),
 
   requestReset: os
@@ -486,6 +486,7 @@ export const members = {
         (m) => m.email.toLowerCase() === input.email.toLowerCase(),
       );
       // Always return success to avoid leaking which emails exist
+      let devCode: string | null = null;
       let code: string | null = null;
       if (found) {
         code = makeCode();
@@ -495,15 +496,16 @@ export const members = {
           resetExpires: new Date(Date.now() + RESET_TTL_MS).toISOString(),
         };
         await memberKV.setItem(updated.id, updated);
-        await sendEmail({
+        const sent = await sendEmail({
           to: updated.email,
           subject: "Reset your Adom Circle password",
           body: `Your password reset code is: ${code}\n\nIt expires in 30 minutes. Never share it with anyone.`,
           debugCode: code,
         });
+        devCode = sent.debugCode;
       }
       await recordAttempt(key);
-      return { devCode: code };
+      return { devCode };
     }),
 
   resetPassword: os
@@ -543,7 +545,9 @@ export const members = {
         "Password changed 🔒",
         "Your Adom Circle password was successfully reset.",
       ).catch(() => {});
-      return { ok: true };
+      // Auto-login after a successful reset — no need to sign in again
+      const token = await createSession(updated.id);
+      return { ok: true, member: sanitizeMember(updated), token };
     }),
 
   byId: os.input(z.string()).handler(async ({ input }) => {

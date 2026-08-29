@@ -154,10 +154,19 @@ export function AuthModal({
     if (newPassword.length < 8) return toast("New password must be at least 8 characters", "error");
     setBusy(true);
     try {
-      await rpcClient.members.resetPassword({ email, code: resetCode, newPassword });
-      toast("Password reset! Sign in with your new password.");
-      setAuthView("login");
-      setPassword("");
+      const res = await rpcClient.members.resetPassword({ email, code: resetCode, newPassword });
+      if (res.token && res.member) {
+        // Auto-login — store the session and close
+        localStorage.setItem("adom_token", res.token);
+        localStorage.setItem("adom_member_id", res.member.id);
+        setUser(res.member);
+        toast(`Welcome back, ${res.member.name.split(" ")[0]}! Password reset. 🇬🇭`);
+        onClose();
+      } else {
+        toast("Password reset! Sign in with your new password.");
+        setAuthView("login");
+        setPassword("");
+      }
     } catch (e: any) {
       toast(e?.message ?? "Reset failed", "error");
     } finally {
