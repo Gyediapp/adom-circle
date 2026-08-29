@@ -44,6 +44,7 @@ type MemberSeed = Omit<
   | "status"
   | "verified"
   | "merchantName"
+  | "privacy"
 >;
 
 const members: MemberSeed[] = [
@@ -265,7 +266,7 @@ const members: MemberSeed[] = [
   },
 ];
 
-const rooms: Array<Omit<Room, "allowAnonymous">> = [
+const rooms: Array<Omit<Room, "allowAnonymous" | "features">> = [
   { id: "room-general", name: "General", description: "Welcome, introductions and open conversation about Ghana.", icon: "🌍", color: "#CE1126", pinned: true, createdAt: now(400) },
   { id: "room-youth", name: "Youth & Education", description: "Mentorship, scholarships, schools and the next generation.", icon: "🎓", color: "#FCD116", pinned: true, createdAt: now(395) },
   { id: "room-health", name: "Health & Welfare", description: "Clinics, clean water, nutrition and community care. Anonymous posting available.", icon: "🩺", color: "#006B3F", pinned: true, createdAt: now(390) },
@@ -276,9 +277,17 @@ const rooms: Array<Omit<Room, "allowAnonymous">> = [
   { id: "room-projects", name: "Projects & Volunteering", description: "Coordinate volunteer hours, resources and project teams.", icon: "🤝", color: "#15803D", pinned: false, createdAt: now(365) },
 ];
 
-const roomToWrite = (r: Omit<Room, "allowAnonymous">): Room => ({
+const roomToWrite = (r: Omit<Room, "allowAnonymous" | "features">): Room => ({
   ...r,
   allowAnonymous: r.id === "room-health",
+  features:
+    r.id === "room-civic"
+      ? ["polls"]
+      : r.id === "room-projects"
+        ? ["kanban"]
+        : r.id === "room-health"
+          ? ["anonymous"]
+          : [],
 });
 
 const messages: Array<Omit<Message, "replyToId" | "reactions" | "savedBy" | "editedAt" | "deleted" | "mentions" | "audio" | "anonymous" | "sentAt" | "pending" | "failed">> = [
@@ -514,6 +523,13 @@ export async function seed() {
         status: "active",
         verified: false,
         merchantName: "",
+        privacy: {
+          showRegion: true,
+          showHometown: true,
+          showProfession: true,
+          showBadges: true,
+          showPoints: true,
+        },
       });
     }
   }

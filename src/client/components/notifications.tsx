@@ -23,6 +23,7 @@ const TYPE_ICON = {
   rank: <Trophy size={14} />,
   broadcast: <Megaphone size={14} />,
   system: <Sparkles size={14} />,
+  dm: <MessageSquareReply size={14} />,
 };
 
 const TYPE_COLOR: Record<string, string> = {
@@ -32,9 +33,16 @@ const TYPE_COLOR: Record<string, string> = {
   rank: "text-[#7C3AED]",
   broadcast: "text-flag-red",
   system: "text-fg/60",
+  dm: "text-flag-green",
 };
 
-export function NotificationBell() {
+export function NotificationBell({
+  onNavigate,
+  onOpenDm,
+}: {
+  onNavigate?: (tab: string) => void;
+  onOpenDm?: () => void;
+}) {
   const { user } = useStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -124,10 +132,20 @@ export function NotificationBell() {
             {items?.map((n) => (
               <button
                 key={n.id}
-                onClick={() =>
-                  !n.read &&
-                  markOne.mutate({ memberId, notificationId: n.id })
-                }
+                onClick={() => {
+                  if (!n.read) markOne.mutate({ memberId, notificationId: n.id });
+                  setOpen(false);
+                  // Route to the relevant page
+                  if (n.type === "dm") {
+                    onOpenDm?.();
+                  } else if (n.type === "event") {
+                    onNavigate?.("events");
+                  } else if (n.type === "rank" || n.type === "system") {
+                    onNavigate?.("community");
+                  } else {
+                    onNavigate?.("community");
+                  }
+                }}
                 className={cn(
                   "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer",
                   n.read ? "opacity-55 hover:opacity-80" : "bg-flag-gold/8 hover:bg-flag-gold/15",

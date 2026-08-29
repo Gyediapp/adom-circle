@@ -34,7 +34,8 @@ import type { Message, ReactionType } from "@/server/rpc/community";
 import type { PublicMember } from "@/server/rpc/members";
 import { DmModal } from "./dm-modal";
 import { ShareModal, type ShareTarget } from "./share-modal";
-import { BarChart3, Kanban } from "lucide-react";
+import { MemberModal } from "./member-modal";
+import { BarChart3, Kanban, SmilePlus } from "lucide-react";
 
 type ChatMsg = Message & { authorPoints: number; authorRole: string };
 
@@ -77,6 +78,7 @@ export function Community() {
   const [editText, setEditText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+  const [profileMember, setProfileMember] = useState<string | null>(null);
   // Optimistic send queue — pending messages appear instantly, retried on failure
   const [pendingMsgs, setPendingMsgs] = useState<
     Array<ChatMsg & { failed?: boolean }>
@@ -138,7 +140,7 @@ export function Community() {
   const { data: polls } = useQuery(
     queryClient.polls.list.queryOptions({
       input: { roomId: activeRoom?.id ?? "" },
-      enabled: !!activeRoom && activeRoom.id === "room-civic",
+      enabled: !!activeRoom && (activeRoom.features ?? []).includes("polls"),
     }),
   );
 
@@ -396,7 +398,7 @@ export function Community() {
   const { data: tasks } = useQuery(
     queryClient.projects.liveTasks.list.experimental_liveOptions({
       input: { projectId: activeRoom?.id ?? "" },
-      enabled: !!activeRoom && activeRoom.id === "room-projects" && kanbanOpen,
+      enabled: !!activeRoom && (activeRoom.features ?? []).includes("kanban") && kanbanOpen,
     }),
   );
 
@@ -473,8 +475,7 @@ export function Community() {
   // Message threading: nest replies up to 2 levels by indentation; deeper
   // replies flatten with an inline "in reply to" chip so phones stay readable.
   const msgList = useMemo<ChatMsg[]>(() => {
-    const server = messages ?? [];
-    // Merge pending (optimistic) messages on top; drop pending copies the server confirmed
+    const server = (messages ?? []).filter((m) => !m.deleted); // hide deleted entirely
     const pendingIds = new Set(pendingMsgs.map((p) => p.id));
     const serverIds = new Set(server.map((m) => m.id));
     const merged = [...server];
@@ -485,6 +486,24 @@ export function Community() {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .filter((m) => !pendingIds.has(m.id) || pendingMsgs.some((p) => p.id === m.id));
   }, [messages, pendingMsgs]);
+
+  // Auto-scroll: when a new message arrives and we're near the bottom, glide down
+  const [newMsgPill, setNewMsgPill] = useState(false);
+  const wasNearBottom = useRef(true);
+  useEffect(() => {
+    const el = chatScroll.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      wasNearBottom.current = true;
+      setNewMsgPill(false);
+    } else {
+      wasNearBottom.current = false;
+      setNewMsgPill(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msgList.length]);
   const msgById = useMemo(() => new Map(msgList.map((m) => [m.id, m])), [msgList]);
   const replyDepth = (m: Message): number => {
     let depth = 0;
@@ -597,7 +616,7 @@ export function Community() {
 
         {/* Main panel */}
         <div ref={panelRef} className="scroll-mt-32">
-          {view === "chat" && activeRoom && activeRoom.id === "room-civic" && (
+          {view === "chat" && activeRoom && (activeRoom.features ?? []).includes("polls") && (
             <div className="mb-5 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-fg/50">
@@ -730,7 +749,7 @@ export function Community() {
             </div>
           )}
 
-          {view === "chat" && activeRoom && activeRoom.id === "room-projects" && (
+          {view === "chat" && activeRoom && (activeRoom.features ?? []).includes("kanban") && (
             <div className="mb-5 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-fg/50">
@@ -935,6 +954,10 @@ export function Community() {
                       confirmingDelete={confirmingDelete === m.id}
                       onReport={() => setReportTarget({ type: "message", label: `${m.authorName}: "${m.text.slice(0, 40)}…"` })}
                       onRetry={pendingCopy?.failed ? () => retryPending(m.id) : undefined}
+                      onProfile={() => {
+                        if (m.anonymous) return;
+                        setProfileMember(m.authorId);
+                      }}
                     />
                   );
                 })}
@@ -955,8 +978,8 @@ export function Community() {
                   </div>
                 )}
                 {audioData ? (
-                  <div className="mb-2 flex items-center gap-2 rounded-2xl bg-soft px-3 py-2">
-                    <audio controls src={audioData} className="h-9 w-52 sm:w-64" />
+                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-soft px-3 py-2">
+                    <audio controls src={audioData} className="h-9 w-full min-w-0 flex-1 sm:w-64 sm:flex-none" />
                     <button
                       onClick={() => setAudioData(null)}
                       className="rounded-full p-1.5 text-fg/40 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
@@ -1165,6 +1188,35 @@ export function Community() {
 
       {/* Share dialog */}
       <ShareModal open={!!shareTarget} onClose={() => setShareTarget(null)} target={shareTarget} />
+
+      {/* Member profile (avatar click) */}
+      <MemberModal
+        memberId={profileMember}
+        open={!!profileMember}
+        onClose={() => setProfileMember(null)}
+        onFollow={() => {
+          if (!me || !profileMember) return;
+          follow.mutate({ memberId: me.id, targetId: profileMember });
+        }}
+        onDm={() => {
+          if (!me || !profileMember) return;
+          setProfileMember(null);
+          openDm({ authorId: profileMember, authorName: "Member" } as ChatMsg);
+        }}
+      />
+
+      {/* New messages pill */}
+      {newMsgPill && (
+        <button
+          onClick={() => {
+            chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
+            setNewMsgPill(false);
+          }}
+          className="fixed bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-cream shadow-xl animate-fade-up cursor-pointer"
+        >
+          ↓ New messages
+        </button>
+      )}
     </div>
   );
 }
@@ -1195,6 +1247,7 @@ function ChatMessage({
   onReport,
   onRetry,
   verified,
+  onProfile,
 }: {
   m: ChatMsg;
   me: PublicMember | null;
@@ -1219,6 +1272,7 @@ function ChatMessage({
   onReport: () => void;
   onRetry?: () => void;
   verified?: boolean;
+  onProfile: () => void;
 }) {
   const mine = m.authorId === me?.id;
   const reactions = m.reactions ?? {};
@@ -1232,7 +1286,13 @@ function ChatMessage({
   return (
     <div className={cn("group", mine && "flex flex-col items-end")} style={{ marginLeft: mine ? 0 : indent }}>
       <div className={cn("flex gap-3", mine && "flex-row-reverse")}>
-        <Avatar name={m.anonymous ? "Anonymous" : m.authorName} size={34} />
+        <button
+          onClick={onProfile}
+          className="cursor-pointer shrink-0 rounded-full transition-opacity hover:opacity-80"
+          title="View profile"
+        >
+          <Avatar name={m.anonymous ? "Anonymous" : m.authorName} size={34} />
+        </button>
         <div className={cn("max-w-[78%] sm:max-w-[70%]", mine && "text-right")}>
           <div className={cn("mb-1 flex items-center gap-2 flex-wrap", mine && "justify-end")}>
             <span className="text-[12px] font-bold">{displayName}</span>
@@ -1301,7 +1361,7 @@ function ChatMessage({
                   controls
                   src={m.audio}
                   preload="none"
-                  className="mb-1.5 h-10 w-56 max-w-full rounded-xl sm:w-64"
+                  className="mb-1.5 h-10 w-full max-w-[240px] rounded-xl sm:w-64"
                 />
               )}
               {m.text && <MentionText text={m.text} mentions={m.mentions ?? []} />}
@@ -1334,7 +1394,7 @@ function ChatMessage({
                       key={r.type}
                       onClick={() => onReact(r.type)}
                       title={r.label}
-                      className="flex h-7 w-7 items-center justify-center rounded-full text-[13px] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ink/5 cursor-pointer"
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-[13px] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ink/5 pointer-coarse:opacity-100 cursor-pointer"
                     >
                       {r.emoji}
                     </button>

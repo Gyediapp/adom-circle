@@ -1,8 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { Crown, MapPin, Vote, ShieldCheck, Award, TrendingUp } from "lucide-react";
-import { queryClient } from "@/client/rpc-client";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Crown, MapPin, Vote, ShieldCheck, Award, TrendingUp, Eye } from "lucide-react";
+import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
-import { Avatar, Chip, Modal, ProgressBar, Button } from "./ui";
+import { Avatar, Chip, Modal, ProgressBar, Button, Toggle } from "./ui";
 import { RankChip, rankIcon } from "@/client/lib/ranks";
 import { rankFor, nextRank, rankProgress, RANKS } from "@/server/data/ranks";
 import { regionName } from "@/server/data/regions";
@@ -18,6 +18,14 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
     }),
   );
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
+  const { toast } = useStore();
+
+  const savePrivacy = useMutation(
+    queryClient.members.update.mutationOptions({
+      onSuccess: () => toast("Privacy settings saved"),
+      onError: (e: any) => toast(e?.message ?? "Failed to save", "error"),
+    }),
+  );
 
   if (!member) return null;
 
@@ -143,6 +151,37 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Privacy — what others can see about you */}
+        <div className="mt-6 rounded-2xl border border-fg/10 bg-soft/40 p-4">
+          <p className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-fg/50">
+            <Eye size={13} className="text-flag-red" /> What others can see
+          </p>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {(
+              [
+                ["showRegion", "Region"],
+                ["showHometown", "Hometown"],
+                ["showProfession", "Profession"],
+                ["showBadges", "Badges"],
+                ["showPoints", "Points & rank"],
+              ] as Array<[keyof NonNullable<typeof member.privacy>, string]>
+            ).map(([key, label]) => (
+              <Toggle
+                key={key}
+                checked={member.privacy?.[key] ?? true}
+                label={label}
+                onChange={(v) => {
+                  const next = { ...member.privacy, [key]: v };
+                  savePrivacy.mutate({ id: member.id, patch: { privacy: next } as any });
+                }}
+              />
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-fg/45">
+            Hidden fields still show to moderators and admins for safety.
+          </p>
         </div>
 
         <Button variant="dark" className="mt-6 w-full py-3" onClick={onClose}>

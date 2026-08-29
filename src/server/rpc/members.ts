@@ -37,6 +37,13 @@ export const MemberSchema = z.object({
   status: z.enum(["active", "suspended"]),
   verified: z.boolean(),
   merchantName: z.string(),
+  privacy: z.object({
+    showRegion: z.boolean(),
+    showHometown: z.boolean(),
+    showProfession: z.boolean(),
+    showBadges: z.boolean(),
+    showPoints: z.boolean(),
+  }),
 });
 
 export type Member = z.output<typeof MemberSchema>;
@@ -52,6 +59,13 @@ export function normalizeMember(m: Member): Member {
     status: m.status ?? "active",
     verified: m.verified ?? false,
     merchantName: m.merchantName ?? "",
+    privacy: m.privacy ?? {
+      showRegion: true,
+      showHometown: true,
+      showProfession: true,
+      showBadges: true,
+      showPoints: true,
+    },
   };
 }
 
@@ -368,6 +382,13 @@ export const members = {
         status: "active",
         verified: false,
         merchantName: "",
+        privacy: {
+          showRegion: true,
+          showHometown: true,
+          showProfession: true,
+          showBadges: true,
+          showPoints: true,
+        },
       };
       await memberKV.setItem(member.id, member);
       const sent = await sendEmail({
@@ -609,6 +630,7 @@ export const members = {
           church: true,
           profession: true,
           bio: true,
+          privacy: true,
         }).partial(),
       }),
     )

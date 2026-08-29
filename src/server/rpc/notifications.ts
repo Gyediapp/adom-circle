@@ -6,7 +6,7 @@ import { createKV } from "../lib/create-kv";
 export const NotificationSchema = z.object({
   id: z.string(),
   memberId: z.string(),
-  type: z.enum(["reply", "like", "event", "rank", "broadcast", "system"]),
+  type: z.enum(["reply", "like", "event", "rank", "broadcast", "system", "dm"]),
   title: z.string(),
   body: z.string(),
   read: z.boolean(),

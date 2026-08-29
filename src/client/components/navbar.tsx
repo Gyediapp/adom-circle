@@ -150,7 +150,7 @@ export function Navbar({
           <button
             onClick={() => setDark(!dark)}
             className={cn(
-              "rounded-full p-2.5 transition-colors cursor-pointer",
+              "hidden sm:flex rounded-full p-2.5 transition-colors cursor-pointer",
               solid ? "text-fg/70 hover:text-fg hover:bg-ink/5" : "text-cream/80 hover:text-cream hover:bg-white/10",
             )}
             aria-label="Toggle dark mode"
@@ -160,7 +160,7 @@ export function Navbar({
           </button>
 
           {/* Language switcher */}
-          <div className="relative" ref={langRef}>
+          <div className="relative hidden sm:block" ref={langRef}>
             <button
               onClick={() => setLangOpen(!langOpen)}
               className={cn(
@@ -213,7 +213,7 @@ export function Navbar({
             </button>
           )}
 
-          {user && <NotificationBell />}
+          {user && <NotificationBell onNavigate={(tab) => go(tab as Tab)} onOpenDm={() => setDmOpen(true)} />}
 
           {user ? (
             <>
@@ -330,6 +330,43 @@ export function Navbar({
                 </Button>
               </div>
             )}
+            <div className="mt-3 flex items-center gap-2 border-t border-fg/10 pt-3">
+              <button
+                onClick={() => setDark(!dark)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-soft px-3 py-2.5 text-sm font-semibold text-fg/70 cursor-pointer"
+              >
+                {dark ? <Sun size={15} /> : <Moon size={15} />}
+                {dark ? "Light mode" : "Dark mode"}
+              </button>
+              <div className="relative flex-1" ref={langRef}>
+                <button
+                  onClick={() => setLangOpen(!langOpen)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-soft px-3 py-2.5 text-sm font-semibold text-fg/70 cursor-pointer"
+                >
+                  <Globe size={15} /> {LANGS.find((l) => l.code === lang)?.native ?? "Language"}
+                </button>
+                {langOpen && (
+                  <div className="absolute bottom-full left-0 z-[70] mb-1 w-full overflow-hidden rounded-2xl border border-fg/10 bg-card shadow-2xl animate-fade-up">
+                    {LANGS.map((l) => (
+                      <button
+                        key={l.code}
+                        onClick={() => {
+                          setLang(l.code);
+                          setLangOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer",
+                          lang === l.code ? "bg-flag-gold/15 text-flag-red" : "text-fg/70 hover:bg-soft",
+                        )}
+                      >
+                        <span>{l.native}</span>
+                        {lang === l.code && <Check size={14} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

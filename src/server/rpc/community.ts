@@ -16,6 +16,7 @@ export const RoomSchema = z.object({
   color: z.string(),
   pinned: z.boolean(),
   allowAnonymous: z.boolean(),
+  features: z.array(z.enum(["polls", "kanban", "anonymous"])),
   createdAt: z.string(),
 });
 
@@ -23,12 +24,18 @@ export type Room = z.output<typeof RoomSchema>;
 
 export const roomKV = createKV<Room>("rooms");
 
-// Existing rooms predate the allowAnonymous field — default the Health room
-// to anonymous-on (it's the room designed for it) without needing a reseed.
+// Existing rooms predate these fields — derive sensible defaults from the
+// room id so the flagship rooms work without a reseed.
 function normalizeRoom(r: Room): Room {
+  const features = r.features ?? [];
+  const idFeatures: Room["features"] = [];
+  if (r.id === "room-civic") idFeatures.push("polls");
+  if (r.id === "room-projects") idFeatures.push("kanban");
+  if (r.id === "room-health") idFeatures.push("anonymous");
   return {
     ...r,
     allowAnonymous: r.allowAnonymous ?? r.id === "room-health",
+    features: features.length > 0 ? features : idFeatures,
   };
 }
 
@@ -219,6 +226,7 @@ export const community = {
         icon: z.string(),
         color: z.string(),
         allowAnonymous: z.boolean().optional(),
+        features: z.array(z.enum(["polls", "kanban", "anonymous"])).optional(),
       }),
     )
     .handler(async ({ input }) => {
@@ -230,7 +238,8 @@ export const community = {
         icon: input.icon,
         color: input.color,
         pinned: false,
-        allowAnonymous: input.allowAnonymous ?? false,
+        allowAnonymous: input.allowAnonymous ?? Boolean(input.features?.includes("anonymous")),
+        features: input.features ?? [],
         createdAt: new Date().toISOString(),
       };
       await roomKV.setItem(room.id, room);
@@ -243,6 +252,31 @@ export const community = {
       const room = await roomKV.getItem(input.roomId);
       if (!room) throw new Error("Room not found");
       const updated = { ...normalizeRoom(room), allowAnonymous: !room.allowAnonymous };
+      await roomKV.setItem(updated.id, updated);
+      return updated;
+    }),
+  setRoomFeature: os
+    .input(
+      z.object({
+        adminId: z.string(),
+        roomId: z.string(),
+        feature: z.enum(["polls", "kanban", "anonymous"]),
+        enabled: z.boolean(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      await requireAdmin(input.adminId);
+      const room = await roomKV.getItem(input.roomId);
+      if (!room) throw new Error("Room not found");
+      const normalized = normalizeRoom(room);
+      const features = input.enabled
+        ? Array.from(new Set([...normalized.features, input.feature]))
+        : normalized.features.filter((f) => f !== input.feature);
+      const updated: Room = {
+        ...normalized,
+        features,
+        allowAnonymous: input.feature === "anonymous" ? input.enabled : normalized.allowAnonymous,
+      };
       await roomKV.setItem(updated.id, updated);
       return updated;
     }),

@@ -1156,6 +1156,12 @@ function ModerationPanel() {
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
+  const setRoomFeature = useMutation(
+    queryClient.community.setRoomFeature.mutationOptions({
+      onSuccess: () => toast("Room feature updated"),
+      onError: (e: any) => toast(e?.message, "error"),
+    }),
+  );
   const createRoom = useMutation(
     queryClient.community.createRoom.mutationOptions({
       onSuccess: () => toast("Room created 🎉"),
@@ -1253,6 +1259,29 @@ function ModerationPanel() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold">{r.name} {r.pinned && <Pin size={11} className="inline text-flag-red" />}</p>
                 <p className="truncate text-[12px] text-fg/45">{r.description} · {r.messageCount} messages</p>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {(["polls", "kanban", "anonymous"] as const).map((f) => {
+                    const on = (r.features ?? []).includes(f);
+                    return (
+                      <button
+                        key={f}
+                        onClick={() =>
+                          user &&
+                          setRoomFeature.mutate({ adminId: user.id, roomId: r.id, feature: f, enabled: !on })
+                        }
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors cursor-pointer",
+                          on
+                            ? "border-flag-green bg-flag-green text-cream"
+                            : "border-fg/15 bg-card text-fg/45 hover:border-flag-green",
+                        )}
+                        title={`${on ? "Disable" : "Enable"} ${f}`}
+                      >
+                        {f}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <button
                 onClick={() => user && pinRoom.mutate({ adminId: user.id, roomId: r.id })}
