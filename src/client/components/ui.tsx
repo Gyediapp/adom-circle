@@ -22,7 +22,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "btn-shine inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
+        "btn-shine inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-[0.95] active:brightness-90 disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
         styles[variant],
         className,
       )}

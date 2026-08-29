@@ -116,7 +116,18 @@ export const DEFAULT_SETTINGS: Settings = {
 export const site = {
   get: os.handler(async () => {
     const items = await settingsKV.getAllItems();
-    return items[0] ?? DEFAULT_SETTINGS;
+    // Merge with defaults so new fields (ticker, etc.) always exist even for
+    // settings saved before they were added.
+    const stored = items[0];
+    if (!stored) return DEFAULT_SETTINGS;
+    return {
+      ...DEFAULT_SETTINGS,
+      ...stored,
+      announcement: { ...DEFAULT_SETTINGS.announcement, ...(stored.announcement ?? {}) },
+      hero: { ...DEFAULT_SETTINGS.hero, ...(stored.hero ?? {}) },
+      stats: { ...DEFAULT_SETTINGS.stats, ...(stored.stats ?? {}) },
+      ticker: { ...DEFAULT_SETTINGS.ticker, ...(stored.ticker ?? {}) },
+    };
   }),
 
   update: os

@@ -173,21 +173,51 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
                 ["showBadges", "Badges"],
                 ["showPoints", "Points & rank"],
               ] as Array<[keyof NonNullable<typeof member.privacy>, string]>
-            ).map(([key, label]) => (
-              <div
-                key={key}
-                className="flex items-center justify-between gap-3 rounded-xl bg-card border border-fg/8 px-3.5 py-2.5"
-              >
-                <span className="text-[13px] font-semibold text-fg/75">{label}</span>
-                <Toggle
-                  checked={member.privacy?.[key] ?? true}
-                  onChange={(v) => {
-                    const next = { ...member.privacy, [key]: v };
+            ).map(([key, label]) => {
+              const on = member.privacy?.[key] ?? true;
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    const next = { ...member.privacy, [key]: !on };
                     savePrivacy.mutate({ id: member.id, patch: { privacy: next } as any });
                   }}
-                />
-              </div>
-            ))}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition-colors cursor-pointer",
+                    on
+                      ? "border-flag-green/40 bg-flag-green/5"
+                      : "border-fg/10 bg-card opacity-80",
+                  )}
+                >
+                  <span className={cn("text-[13px] font-semibold", on ? "text-flag-green" : "text-fg/60")}>
+                    {label}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                        on ? "bg-flag-green text-cream" : "bg-ink/10 text-fg/50",
+                      )}
+                    >
+                      {on ? "On" : "Off"}
+                    </span>
+                    <span
+                      className={cn(
+                        "relative h-5 w-9 rounded-full transition-colors",
+                        on ? "bg-flag-green" : "bg-ink/20",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 h-4 w-4 rounded-full bg-card shadow transition-transform",
+                          on ? "translate-x-[18px]" : "translate-x-0.5",
+                        )}
+                      />
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
           <p className="mt-2 text-[11px] text-fg/45">
             Hidden fields still show to moderators and admins for safety.
