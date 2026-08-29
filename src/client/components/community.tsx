@@ -187,7 +187,7 @@ export function Community() {
   const submitMessage = () => {
     if (!me) return toast("Sign in to join the conversation", "error");
     if (!activeRoom) return;
-    if (!text.trim() && !audioData) return;
+    if (!text.trim() && !audioData) return; // text OR audio required
     const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const nowIso = new Date().toISOString();
     const pending: ChatMsg & { failed?: boolean } = {
@@ -520,6 +520,23 @@ export function Community() {
     }
     return depth;
   };
+
+  // Facebook-style grouping: top-level messages in order, with their replies
+  // nested directly beneath. Deep chains flatten with an inline "in reply to".
+  const chatGroups = useMemo(() => {
+    const tops: ChatMsg[] = [];
+    const repliesByParent = new Map<string, ChatMsg[]>();
+    for (const m of msgList) {
+      if (!m.replyToId || !msgById.has(m.replyToId)) {
+        tops.push(m);
+      } else {
+        const arr = repliesByParent.get(m.replyToId) ?? [];
+        arr.push(m);
+        repliesByParent.set(m.replyToId, arr);
+      }
+    }
+    return { tops, repliesByParent };
+  }, [msgList, msgById]);
 
   const roomThreads = useMemo(
     () => threads?.filter((t) => t.roomId === activeRoom?.id) ?? [],
@@ -888,7 +905,7 @@ export function Community() {
           )}
 
           {view === "chat" && activeRoom && (
-            <Card className="flex h-[72vh] flex-col overflow-hidden">
+            <Card className="flex h-[80vh] flex-col overflow-hidden">
               <div className="flex items-center justify-between border-b border-fg/8 px-5 py-3.5">
                 <div>
                   <p className="font-bold">{activeRoom.icon} {activeRoom.name}</p>
@@ -905,7 +922,7 @@ export function Community() {
                     Start the conversation in {activeRoom.name} 💬
                   </div>
                 )}
-                {msgList.map((m) => {
+                {chatGroups.tops.map((m) => {
                   const authorInfo =
                     m.authorId !== "anonymous"
                       ? (authorsById.current?.get(m.authorId) as
@@ -913,53 +930,117 @@ export function Community() {
                           | undefined)
                       : undefined;
                   const pendingCopy = pendingMsgs.find((p) => p.id === m.id);
+                  const replies = chatGroups.repliesByParent.get(m.id) ?? [];
                   return (
-                    <ChatMessage
-                      key={m.id}
-                      m={m}
-                      me={me}
-                      depth={replyDepth(m)}
-                      parentName={m.replyToId ? msgById.get(m.replyToId)?.authorName ?? null : null}
-                      followed={followed.has(m.authorId)}
-                      canModerate={
-                        !!me &&
-                        (me.role === "admin" ||
-                          (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
-                      }
-                      verified={Boolean(authorInfo?.verified)}
-                      onReact={(type) => me && react.mutate({ memberId: me.id, messageId: m.id, type })}
-                      onReply={() => {
-                        if (!me) return toast("Sign in to reply", "error");
-                        setReplyingTo({ id: m.id, name: m.authorName });
-                        chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
-                      }}
-                      onSave={() => me && saveMsg.mutate({ memberId: me.id, messageId: m.id })}
-                      onShare={() => shareMessage(m)}
-                      onFollow={() => me && follow.mutate({ memberId: me.id, targetId: m.authorId })}
-                      onDm={() => openDm(m)}
-                      onEdit={() => {
-                        setEditingId(m.id);
-                        setEditText(m.text);
-                      }}
-                      onDelete={() => {
-                        setDeleteTarget({ id: m.id, name: m.authorName });
-                      }}
-                      editing={editingId === m.id}
-                      editText={editText}
-                      onEditTextChange={setEditText}
-                      onEditSave={() => me && editMsg.mutate({ memberId: me.id, messageId: m.id, text: editText })}
-                      onEditCancel={() => {
-                        setEditingId(null);
-                        setEditText("");
-                      }}
-                      confirmingDelete={confirmingDelete === m.id}
-                      onReport={() => setReportTarget({ type: "message", label: `${m.authorName}: "${m.text.slice(0, 40)}…"` })}
-                      onRetry={pendingCopy?.failed ? () => retryPending(m.id) : undefined}
-                      onProfile={() => {
-                        if (m.anonymous) return;
-                        setProfileMember(m.authorId);
-                      }}
-                    />
+                    <div key={m.id} className="space-y-2">
+                      <ChatMessage
+                        m={m}
+                        me={me}
+                        depth={0}
+                        parentName={null}
+                        followed={followed.has(m.authorId)}
+                        canModerate={
+                          !!me &&
+                          (me.role === "admin" ||
+                            (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
+                        }
+                        verified={Boolean(authorInfo?.verified)}
+                        onReact={(type) => me && react.mutate({ memberId: me.id, messageId: m.id, type })}
+                        onReply={() => {
+                          if (!me) return toast("Sign in to reply", "error");
+                          setReplyingTo({ id: m.id, name: m.authorName });
+                          chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
+                        }}
+                        onSave={() => me && saveMsg.mutate({ memberId: me.id, messageId: m.id })}
+                        onShare={() => shareMessage(m)}
+                        onFollow={() => me && follow.mutate({ memberId: me.id, targetId: m.authorId })}
+                        onDm={() => openDm(m)}
+                        onEdit={() => {
+                          setEditingId(m.id);
+                          setEditText(m.text);
+                        }}
+                        onDelete={() => {
+                          setDeleteTarget({ id: m.id, name: m.authorName });
+                        }}
+                        editing={editingId === m.id}
+                        editText={editText}
+                        onEditTextChange={setEditText}
+                        onEditSave={() => me && editMsg.mutate({ memberId: me.id, messageId: m.id, text: editText })}
+                        onEditCancel={() => {
+                          setEditingId(null);
+                          setEditText("");
+                        }}
+                        confirmingDelete={confirmingDelete === m.id}
+                        onReport={() => setReportTarget({ type: "message", label: `${m.authorName}: "${m.text.slice(0, 40)}…"` })}
+                        onRetry={pendingCopy?.failed ? () => retryPending(m.id) : undefined}
+                        onProfile={() => {
+                          if (m.anonymous) return;
+                          setProfileMember(m.authorId);
+                        }}
+                      />
+                      {replies.length > 0 && (
+                        <div className="ml-9 space-y-2 border-l-2 border-fg/8 pl-4">
+                          {replies.map((r) => {
+                            const rInfo =
+                              r.authorId !== "anonymous"
+                                ? (authorsById.current?.get(r.authorId) as
+                                    | { verified?: boolean; merchantName?: string }
+                                    | undefined)
+                                : undefined;
+                            const rPending = pendingMsgs.find((p) => p.id === r.id);
+                            const rParentName = r.replyToId ? msgById.get(r.replyToId)?.authorName ?? null : null;
+                            return (
+                              <ChatMessage
+                                key={r.id}
+                                m={r}
+                                me={me}
+                                depth={replyDepth(r)}
+                                parentName={rParentName}
+                                followed={followed.has(r.authorId)}
+                                canModerate={
+                                  !!me &&
+                                  (me.role === "admin" ||
+                                    (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
+                                }
+                                verified={Boolean(rInfo?.verified)}
+                                onReact={(type) => me && react.mutate({ memberId: me.id, messageId: r.id, type })}
+                                onReply={() => {
+                                  if (!me) return toast("Sign in to reply", "error");
+                                  setReplyingTo({ id: r.id, name: r.authorName });
+                                  chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
+                                }}
+                                onSave={() => me && saveMsg.mutate({ memberId: me.id, messageId: r.id })}
+                                onShare={() => shareMessage(r)}
+                                onFollow={() => me && follow.mutate({ memberId: me.id, targetId: r.authorId })}
+                                onDm={() => openDm(r)}
+                                onEdit={() => {
+                                  setEditingId(r.id);
+                                  setEditText(r.text);
+                                }}
+                                onDelete={() => {
+                                  setDeleteTarget({ id: r.id, name: r.authorName });
+                                }}
+                                editing={editingId === r.id}
+                                editText={editText}
+                                onEditTextChange={setEditText}
+                                onEditSave={() => me && editMsg.mutate({ memberId: me.id, messageId: r.id, text: editText })}
+                                onEditCancel={() => {
+                                  setEditingId(null);
+                                  setEditText("");
+                                }}
+                                confirmingDelete={confirmingDelete === r.id}
+                                onReport={() => setReportTarget({ type: "message", label: `${r.authorName}: "${r.text.slice(0, 40)}…"` })}
+                                onRetry={rPending?.failed ? () => retryPending(r.id) : undefined}
+                                onProfile={() => {
+                                  if (r.anonymous) return;
+                                  setProfileMember(r.authorId);
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -1325,10 +1406,10 @@ function ChatMessage({
 
   return (
     <div className={cn("group", mine && "flex flex-col items-end")} style={{ marginLeft: mine ? 0 : indent }}>
-      <div className={cn("flex gap-3", mine && "flex-row-reverse")}>
+      <div className={cn("flex gap-2.5", mine && "flex-row-reverse")}>
         <button
           onClick={onProfile}
-          className="cursor-pointer shrink-0 rounded-full transition-opacity hover:opacity-80"
+          className="cursor-pointer shrink-0 rounded-full transition-opacity hover:opacity-80 ml-0.5"
           title="View profile"
         >
           <Avatar name={m.anonymous ? "Anonymous" : m.authorName} size={34} />

@@ -313,16 +313,27 @@ export const community = {
   },
   sendMessage: os
     .input(
-      z.object({
-        memberId: z.string(),
-        roomId: z.string(),
-        text: z.string().min(1).max(2000),
-        replyToId: z.string().nullable().optional(),
-        mentionIds: z.array(z.string()).max(10).optional(),
-        audio: z.string().nullable().optional(),
-        anonymous: z.boolean().optional(),
-        confirmPending: z.string().optional(),
-      }),
+      z
+        .object({
+          memberId: z.string(),
+          roomId: z.string(),
+          text: z.string().max(2000),
+          replyToId: z.string().nullable().optional(),
+          mentionIds: z.array(z.string()).max(10).optional(),
+          audio: z.string().nullable().optional(),
+          anonymous: z.boolean().optional(),
+          confirmPending: z.string().optional(),
+        })
+        .superRefine((v, ctx) => {
+          // Text or audio required — a voice-only message is allowed with empty text
+          if (!v.text.trim() && !v.audio) {
+            ctx.addIssue({
+              code: "custom",
+              message: "Message text is required (or attach a voice message)",
+              path: ["text"],
+            });
+          }
+        }),
     )
     .handler(async ({ input }) => {
       const member = await requireMember(input.memberId);
