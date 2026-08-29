@@ -77,6 +77,7 @@ export function Community() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
   const [profileMember, setProfileMember] = useState<string | null>(null);
   // Optimistic send queue — pending messages appear instantly, retried on failure
@@ -489,21 +490,20 @@ export function Community() {
     for (const p of pendingMsgs) {
       if (!serverIds.has(p.id)) merged.push(p as ChatMsg);
     }
-    // Newest messages at the top — latest is always in view for quick replies
+    // Oldest at top, newest at bottom (classic chat)
     return merged
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .filter((m) => !pendingIds.has(m.id) || pendingMsgs.some((p) => p.id === m.id));
   }, [messages, pendingMsgs]);
 
-  // Auto-scroll: with newest-at-top, stay pinned to the top when new messages
-  // arrive; if the user has scrolled down, show an "up" pill instead.
+  // Auto-scroll: when a new message arrives and we're near the bottom, glide down
   const [newMsgPill, setNewMsgPill] = useState(false);
   useEffect(() => {
     const el = chatScroll.current;
     if (!el) return;
-    const nearTop = el.scrollTop < 100;
-    if (nearTop) {
-      el.scrollTo({ top: 0, behavior: "smooth" });
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       setNewMsgPill(false);
     } else {
       setNewMsgPill(true);
@@ -942,12 +942,7 @@ export function Community() {
                         setEditText(m.text);
                       }}
                       onDelete={() => {
-                        if (confirmingDelete === m.id) {
-                          me && deleteMsg.mutate({ memberId: me.id, messageId: m.id });
-                        } else {
-                          setConfirmingDelete(m.id);
-                          setTimeout(() => setConfirmingDelete((cur) => (cur === m.id ? null : cur)), 3000);
-                        }
+                        setDeleteTarget({ id: m.id, name: m.authorName });
                       }}
                       editing={editingId === m.id}
                       editText={editText}
@@ -1065,33 +1060,33 @@ export function Community() {
                     {sendMessage.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                   </Button>
                 </div>
-                {/* Room mode toggles */}
-                <div className="mt-2 flex flex-wrap items-center gap-3 px-1">
+                {/* Room mode toggles — slim single row */}
+                <div className="mt-1.5 flex items-center gap-2 px-1">
                   {activeRoom.allowAnonymous && me && (
                     <button
                       onClick={() => setAnonymous(!anonymous)}
                       className={cn(
-                        "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors cursor-pointer",
+                        "flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold transition-colors cursor-pointer",
                         anonymous
                           ? "border-flag-red bg-flag-red text-cream"
                           : "border-fg/15 text-fg/50 hover:border-flag-red hover:text-flag-red",
                       )}
                       title="Post without showing your name"
                     >
-                      <UserPlus size={11} /> {anonymous ? "Posting anonymously" : "Post anonymously"}
+                      <UserPlus size={10} /> {anonymous ? "Anonymous on" : "Anonymous"}
                     </button>
                   )}
                   <button
                     onClick={() => setAudioOnly(!audioOnly)}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold transition-colors cursor-pointer",
+                      "flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold transition-colors cursor-pointer",
                       audioOnly
                         ? "border-flag-green bg-flag-green text-cream"
                         : "border-fg/15 text-fg/50 hover:border-flag-green hover:text-flag-green",
                     )}
                     title="Data saver — hide images & emojis, keep text and voice"
                   >
-                    <Mic size={11} /> {audioOnly ? "Audio mode on" : "Audio mode"}
+                    <Mic size={10} /> {audioOnly ? "Audio on" : "Audio"}
                   </button>
                 </div>
               </div>
@@ -1165,6 +1160,36 @@ export function Community() {
         </div>
       </div>
 
+      {/* Delete message confirmation */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        <div className="p-6 sm:p-8 text-center">
+          <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-flag-red/10 text-flag-red">
+            <Trash2 size={24} />
+          </span>
+          <p className="font-display text-xl font-bold">Delete this message?</p>
+          <p className="mt-2 text-sm text-fg/60">
+            {deleteTarget?.name && <strong className="text-fg">{deleteTarget.name}'s</strong>}{" "}
+            message will be permanently removed for everyone.
+          </p>
+          <div className="mt-6 flex gap-2">
+            <Button variant="ghost" className="flex-1" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              onClick={() => {
+                if (!me || !deleteTarget) return;
+                deleteMsg.mutate({ memberId: me.id, messageId: deleteTarget.id });
+                setDeleteTarget(null);
+              }}
+            >
+              <Trash2 size={15} /> Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Report modal */}
       <Modal open={!!reportTarget} onClose={() => setReportTarget(null)}>
         <div className="p-6 sm:p-8">
@@ -1220,16 +1245,16 @@ export function Community() {
         }}
       />
 
-      {/* New messages pill — appears when scrolled down from the latest */}
+      {/* New messages pill — appears when scrolled up from the latest */}
       {newMsgPill && (
         <button
           onClick={() => {
-            chatScroll.current?.scrollTo({ top: 0, behavior: "smooth" });
+            chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
             setNewMsgPill(false);
           }}
-          className="fixed left-1/2 top-28 z-40 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-cream shadow-xl animate-fade-up cursor-pointer"
+          className="fixed bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-cream shadow-xl animate-fade-up cursor-pointer"
         >
-          ↑ New messages
+          ↓ New messages
         </button>
       )}
     </div>

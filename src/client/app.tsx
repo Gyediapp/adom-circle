@@ -95,8 +95,22 @@ function Shell() {
 
   return (
     <div className="min-h-screen">
-      {/* Fixed header stack: announcement + navbar */}
+      {/* Fixed header stack: ticker + announcement + navbar */}
       <div className="fixed inset-x-0 top-0 z-50">
+        {settings?.ticker?.enabled && settings.ticker.text && (
+          <div className="relative z-10 overflow-hidden bg-ink py-1.5 text-cream">
+            <div className="flex w-max animate-marquee gap-8">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-8 whitespace-nowrap text-[12px] font-semibold tracking-wide">
+                  <Star size={11} className="text-flag-gold" aria-hidden />
+                  <span>{settings.ticker.text}</span>
+                  <Star size={11} className="text-flag-gold" aria-hidden />
+                  <span>{settings.ticker.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {settings?.announcement.enabled && (
           <div className="flag-stripes flex items-center justify-center gap-2 px-4 py-2 text-center text-[12.5px] font-bold tracking-wide text-ink">
             <Star size={13} className="shrink-0" aria-hidden />

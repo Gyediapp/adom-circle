@@ -8,6 +8,7 @@ import { emails } from "./emails";
 import { admin } from "./admin";
 import { dms } from "./dms";
 import { polls } from "./polls";
+import { suggestions } from "./suggestions";
 import { seed } from "./seed";
 
 // Populate demo data on first boot
@@ -25,4 +26,5 @@ export const router = {
   admin,
   dms,
   polls,
+  suggestions,
 };

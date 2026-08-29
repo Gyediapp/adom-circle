@@ -36,6 +36,10 @@ export const SettingsSchema = z.object({
   ),
   welcome: z.string(),
   footer: z.string(),
+  ticker: z.object({
+    text: z.string(),
+    enabled: z.boolean(),
+  }),
 });
 
 export type Settings = z.output<typeof SettingsSchema>;
@@ -103,6 +107,10 @@ export const DEFAULT_SETTINGS: Settings = {
     "Welcome to Adom Circle. Every Ghanaian who accepts the Constitution of Ghana and respects peaceful coexistence is welcome here — at home or in the diaspora.",
   footer:
     "Adom Circle — uniting Ghanaians under one Constitution, for a peaceful and prosperous Ghana. © 2026 Adom Circle.",
+  ticker: {
+    text: "Register to vote · Know the Constitution · Peace is everyone's duty 🇬🇭",
+    enabled: true,
+  },
 };
 
 export const site = {

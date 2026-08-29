@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Crown, MapPin, Vote, ShieldCheck, Award, TrendingUp, Eye } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
@@ -19,10 +20,15 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
   );
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
   const { toast } = useStore();
+  const tanQuery = useQueryClient();
 
   const savePrivacy = useMutation(
     queryClient.members.update.mutationOptions({
-      onSuccess: () => toast("Privacy settings saved"),
+      onSuccess: () => {
+        toast("Privacy settings saved");
+        // Refresh the profile so the toggles reflect the saved state
+        tanQuery.invalidateQueries({ queryKey: ["members", "byId", user?.id] });
+      },
       onError: (e: any) => toast(e?.message ?? "Failed to save", "error"),
     }),
   );

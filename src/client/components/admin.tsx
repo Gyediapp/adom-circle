@@ -385,6 +385,25 @@ function ContentManager() {
         </Button>
       </div>
 
+      {/* Ticker — scrolling top bar */}
+      <Card className="p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-bold">Scrolling ticker (top of site)</p>
+          <Toggle
+            checked={draft.ticker?.enabled ?? false}
+            onChange={(v) => set("ticker", { ...draft.ticker, enabled: v, text: draft.ticker?.text ?? "" })}
+            label="Visible"
+          />
+        </div>
+        <textarea
+          value={draft.ticker?.text ?? ""}
+          onChange={(e) => set("ticker", { ...draft.ticker, text: e.target.value, enabled: draft.ticker?.enabled ?? false })}
+          placeholder="Type your daily civic message here — it scrolls slowly across the top of the site…"
+          className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15"
+        />
+        <p className="mt-1.5 text-[11px] text-fg/45">Shown above the announcement bar, moves slowly across the top.</p>
+      </Card>
+
       {/* Announcement */}
       <Card className="p-6">
         <div className="mb-3 flex items-center justify-between">
@@ -1131,6 +1150,12 @@ function ModerationPanel() {
     }),
   );
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
+  const { data: suggestions } = useQuery(
+    queryClient.suggestions.adminList.queryOptions({
+      input: { adminId: user?.id ?? "" },
+      enabled: !!user,
+    }),
+  );
   const { data: overview } = useQuery(
     queryClient.admin.overview.queryOptions({
       input: { adminId: user?.id ?? "" },
@@ -1159,6 +1184,18 @@ function ModerationPanel() {
   const setRoomFeature = useMutation(
     queryClient.community.setRoomFeature.mutationOptions({
       onSuccess: () => toast("Room feature updated"),
+      onError: (e: any) => toast(e?.message, "error"),
+    }),
+  );
+  const moderateSuggestion = useMutation(
+    queryClient.suggestions.moderate.mutationOptions({
+      onSuccess: () => toast("Suggestion updated"),
+      onError: (e: any) => toast(e?.message, "error"),
+    }),
+  );
+  const removeSuggestion = useMutation(
+    queryClient.suggestions.remove.mutationOptions({
+      onSuccess: () => toast("Suggestion removed"),
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
@@ -1298,6 +1335,76 @@ function ModerationPanel() {
               </button>
             </div>
           ))}
+        </div>
+      </Card>
+
+      {/* Voice for Ghana — moderation */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-fg/8 p-4">
+          <p className="text-sm font-bold">Voice for Ghana — suggestions</p>
+          <Chip tone="gold"><Megaphone size={11} /> {suggestions?.filter((s) => s.status === "pending").length ?? 0} pending</Chip>
+        </div>
+        <div className="divide-y divide-fg/5">
+          {(suggestions ?? []).slice(0, 12).map((s) => (
+            <div key={s.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
+              <div className="flex-1">
+                <p className="text-[13px] leading-snug">“{s.text}”</p>
+                <p className="mt-1 text-[11px] text-fg/45">
+                  {s.authorName} · {s.upvotes.length} upvotes ·{" "}
+                  <span className="capitalize">{s.status}</span>
+                  {s.featured && " · featured"}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {s.status !== "approved" && (
+                  <Button
+                    variant="dark"
+                    className="rounded-full px-3 py-1 text-xs"
+                    onClick={() => user && moderateSuggestion.mutate({ adminId: user.id, suggestionId: s.id, status: "approved" })}
+                  >
+                    Approve
+                  </Button>
+                )}
+                {s.status !== "rejected" && (
+                  <Button
+                    variant="ghost"
+                    className="rounded-full px-3 py-1 text-xs"
+                    onClick={() => user && moderateSuggestion.mutate({ adminId: user.id, suggestionId: s.id, status: "rejected" })}
+                  >
+                    Reject
+                  </Button>
+                )}
+                <button
+                  onClick={() =>
+                    user &&
+                    moderateSuggestion.mutate({
+                      adminId: user.id,
+                      suggestionId: s.id,
+                      status: s.status,
+                      featured: !s.featured,
+                    })
+                  }
+                  className={cn(
+                    "rounded-full p-2 cursor-pointer",
+                    s.featured ? "text-flag-gold" : "text-fg/30 hover:text-flag-gold",
+                  )}
+                  title={s.featured ? "Unfeature" : "Feature"}
+                >
+                  <Star size={15} />
+                </button>
+                <button
+                  onClick={() => user && removeSuggestion.mutate({ adminId: user.id, suggestionId: s.id })}
+                  className="rounded-full p-2 text-fg/30 hover:text-flag-red cursor-pointer"
+                  title="Delete"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {(!suggestions || suggestions.length === 0) && (
+            <p className="p-8 text-center text-sm text-fg/45">No suggestions yet.</p>
+          )}
         </div>
       </Card>
 

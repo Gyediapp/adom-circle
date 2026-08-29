@@ -9,12 +9,13 @@ import {
   ShieldCheck,
   Loader2,
   Megaphone,
+  ThumbsUp,
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { Button, Card, Chip, SectionHeading } from "./ui";
-import { LogoMark } from "@/client/lib/logo";
-import { cn } from "@/client/lib/format";
+import { LogoMark, Star } from "@/client/lib/logo";
+import { cn, timeAgo } from "@/client/lib/format";
 
 const FACTS = [
   {
@@ -68,6 +69,26 @@ export function Civic() {
 
   const currentUser = user;
   const hasPledged = me?.pledgeVote ?? pledged;
+
+  // Voice for Ghana
+  const [suggestionText, setSuggestionText] = useState("");
+  const { data: suggestionsList = [] } = useQuery(
+    queryClient.suggestions.list.queryOptions(),
+  );
+  const submitSuggestion = useMutation(
+    queryClient.suggestions.submit.mutationOptions({
+      onSuccess: () => {
+        toast("Suggestion sent! It will appear once approved. 🇬🇭");
+        setSuggestionText("");
+      },
+      onError: (e: any) => toast(e?.message ?? "Failed to send", "error"),
+    }),
+  );
+  const upvoteSuggestion = useMutation(
+    queryClient.suggestions.upvote.mutationOptions({
+      onError: (e: any) => toast(e?.message ?? "Failed", "error"),
+    }),
+  );
 
   return (
     <div>
@@ -194,6 +215,88 @@ export function Civic() {
                 </div>
               </div>
             </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Voice for Ghana — suggestions for representatives */}
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+        <SectionHeading
+          eyebrow="Your voice, carried forward"
+          title={<>Voice for <span className="text-flag-green">Ghana</span></>}
+          sub="One sentence. What would you ask our MPs and representatives to put forward, leaving no one behind? Approved suggestions are featured and shared."
+        />
+
+        <div className="mt-10 grid gap-8 lg:grid-cols-[360px_1fr]">
+          {/* Submit box */}
+          <Card className="h-fit p-6">
+            <p className="mb-3 text-sm font-bold">Submit a suggestion</p>
+            <textarea
+              value={suggestionText}
+              onChange={(e) => setSuggestionText(e.target.value)}
+              placeholder="e.g. Invest in boreholes for rural schools so no child walks 4km for water."
+              rows={4}
+              className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-green focus:ring-2 focus:ring-flag-green/15"
+            />
+            <Button
+              variant="dark"
+              className="mt-3 w-full"
+              disabled={submitSuggestion.isPending || suggestionText.trim().length < 10}
+              onClick={() => {
+                if (!currentUser) return toast("Join the circle first — it takes 30 seconds", "error");
+                submitSuggestion.mutate({ memberId: currentUser.id, text: suggestionText.trim() });
+              }}
+            >
+              {submitSuggestion.isPending ? <Loader2 size={16} className="animate-spin" /> : <Megaphone size={16} />}
+              Send to the wall
+            </Button>
+            <p className="mt-2 text-center text-[11px] text-fg/45">One per day · reviewed before publishing</p>
+          </Card>
+
+          {/* The wall */}
+          <div className="space-y-4">
+            {suggestionsList.length === 0 && (
+              <Card className="p-10 text-center text-sm text-fg/45">
+                No approved suggestions yet — be the first voice. 🇬🇭
+              </Card>
+            )}
+            {suggestionsList.map((s) => {
+              const upvoted = currentUser ? s.upvotes.includes(currentUser.id) : false;
+              return (
+                <Card key={s.id} hover className="p-5">
+                  <div className="flex items-start gap-4">
+                    <button
+                      onClick={() => {
+                        if (!currentUser) return toast("Join the circle to upvote", "error");
+                        upvoteSuggestion.mutate({ memberId: currentUser.id, suggestionId: s.id });
+                      }}
+                      className={cn(
+                        "flex flex-col items-center rounded-2xl border px-3 py-2 transition-colors cursor-pointer",
+                        upvoted
+                          ? "border-flag-green bg-flag-green/10 text-flag-green"
+                          : "border-fg/15 text-fg/50 hover:border-flag-green hover:text-flag-green",
+                      )}
+                      title="Upvote"
+                    >
+                      <ThumbsUp size={16} />
+                      <span className="text-sm font-bold">{s.upvotes.length}</span>
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] leading-relaxed text-fg/85">“{s.text}”</p>
+                      <p className="mt-2 flex items-center gap-2 text-[12px] text-fg/45">
+                        {s.featured && (
+                          <Chip tone="gold" className="px-2 py-0.5 text-[10px]">
+                            <Star size={10} /> Featured
+                          </Chip>
+                        )}
+                        <span className="font-semibold">{s.authorName}</span>
+                        <span>· {timeAgo(s.createdAt)}</span>
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>
