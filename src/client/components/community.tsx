@@ -171,9 +171,6 @@ export function Community() {
         setAudioData(null);
         setAnonymous(false);
         setPendingMsgs((q) => q.filter((p) => p.id !== (vars.confirmPending ?? "__none__")));
-        requestAnimationFrame(() =>
-          chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" }),
-        );
       },
       onError: (e: any, vars) => {
         setPendingMsgs((q) =>
@@ -438,14 +435,24 @@ export function Community() {
     if (!me) return toast("Sign in to record a voice message", "error");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
+      // Pick a format the device can actually play back: webm on Android/Chrome,
+      // mp4 (AAC) on iOS/Safari — otherwise the audio element shows blank.
+      const mimeType =
+        typeof MediaRecorder !== "undefined"
+          ? MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+            ? "audio/webm;codecs=opus"
+            : MediaRecorder.isTypeSupported("audio/mp4")
+              ? "audio/mp4"
+              : undefined
+          : undefined;
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = rec;
       recChunksRef.current = [];
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) recChunksRef.current.push(e.data);
       };
       rec.onstop = () => {
-        const blob = new Blob(recChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(recChunksRef.current, { type: mimeType ?? "audio/webm" });
         const reader = new FileReader();
         reader.onloadend = () => {
           setAudioData(reader.result as string);
@@ -482,24 +489,23 @@ export function Community() {
     for (const p of pendingMsgs) {
       if (!serverIds.has(p.id)) merged.push(p as ChatMsg);
     }
+    // Newest messages at the top — latest is always in view for quick replies
     return merged
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .filter((m) => !pendingIds.has(m.id) || pendingMsgs.some((p) => p.id === m.id));
   }, [messages, pendingMsgs]);
 
-  // Auto-scroll: when a new message arrives and we're near the bottom, glide down
+  // Auto-scroll: with newest-at-top, stay pinned to the top when new messages
+  // arrive; if the user has scrolled down, show an "up" pill instead.
   const [newMsgPill, setNewMsgPill] = useState(false);
-  const wasNearBottom = useRef(true);
   useEffect(() => {
     const el = chatScroll.current;
     if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (nearBottom) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-      wasNearBottom.current = true;
+    const nearTop = el.scrollTop < 100;
+    if (nearTop) {
+      el.scrollTo({ top: 0, behavior: "smooth" });
       setNewMsgPill(false);
     } else {
-      wasNearBottom.current = false;
       setNewMsgPill(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -980,6 +986,15 @@ export function Community() {
                 {audioData ? (
                   <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-soft px-3 py-2">
                     <audio controls src={audioData} className="h-9 w-full min-w-0 flex-1 sm:w-64 sm:flex-none" />
+                    <Button
+                      variant="dark"
+                      className="rounded-full px-4 py-1.5 text-xs"
+                      onClick={submitMessage}
+                      disabled={sendMessage.isPending}
+                    >
+                      {sendMessage.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      Send voice
+                    </Button>
                     <button
                       onClick={() => setAudioData(null)}
                       className="rounded-full p-1.5 text-fg/40 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
@@ -1205,16 +1220,16 @@ export function Community() {
         }}
       />
 
-      {/* New messages pill */}
+      {/* New messages pill — appears when scrolled down from the latest */}
       {newMsgPill && (
         <button
           onClick={() => {
-            chatScroll.current?.scrollTo({ top: chatScroll.current.scrollHeight, behavior: "smooth" });
+            chatScroll.current?.scrollTo({ top: 0, behavior: "smooth" });
             setNewMsgPill(false);
           }}
-          className="fixed bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-cream shadow-xl animate-fade-up cursor-pointer"
+          className="fixed left-1/2 top-28 z-40 -translate-x-1/2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-cream shadow-xl animate-fade-up cursor-pointer"
         >
-          ↓ New messages
+          ↑ New messages
         </button>
       )}
     </div>

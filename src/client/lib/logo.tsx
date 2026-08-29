@@ -5,10 +5,24 @@ import { logoMarkMarkup } from "./logo-svg";
 const STAR_PATH =
   "M 80,40 L 90,66.25 L 118.04,67.64 L 96.17,85.25 L 103.51,112.36 L 80,97 L 56.49,112.36 L 63.83,85.25 L 41.96,67.64 L 70,66.25 Z";
 
-export function Star({ size = 20, className }: { size?: number; className?: string }) {
+export function Star({
+  size = 20,
+  className,
+  outline = false,
+}: {
+  size?: number;
+  className?: string;
+  outline?: boolean;
+}) {
   return (
     <svg viewBox="0 0 160 160" width={size} height={size} className={className} aria-hidden>
-      <path d={STAR_PATH} fill="currentColor" />
+      <path
+        d={STAR_PATH}
+        fill="currentColor"
+        stroke={outline ? "var(--color-flag-gold)" : "none"}
+        strokeWidth={outline ? 7 : 0}
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

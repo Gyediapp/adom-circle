@@ -158,7 +158,7 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
           <p className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-fg/50">
             <Eye size={13} className="text-flag-red" /> What others can see
           </p>
-          <div className="grid gap-2.5 sm:grid-cols-2">
+          <div className="space-y-2">
             {(
               [
                 ["showRegion", "Region"],
@@ -168,15 +168,19 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
                 ["showPoints", "Points & rank"],
               ] as Array<[keyof NonNullable<typeof member.privacy>, string]>
             ).map(([key, label]) => (
-              <Toggle
+              <div
                 key={key}
-                checked={member.privacy?.[key] ?? true}
-                label={label}
-                onChange={(v) => {
-                  const next = { ...member.privacy, [key]: v };
-                  savePrivacy.mutate({ id: member.id, patch: { privacy: next } as any });
-                }}
-              />
+                className="flex items-center justify-between gap-3 rounded-xl bg-card border border-fg/8 px-3.5 py-2.5"
+              >
+                <span className="text-[13px] font-semibold text-fg/75">{label}</span>
+                <Toggle
+                  checked={member.privacy?.[key] ?? true}
+                  onChange={(v) => {
+                    const next = { ...member.privacy, [key]: v };
+                    savePrivacy.mutate({ id: member.id, patch: { privacy: next } as any });
+                  }}
+                />
+              </div>
             ))}
           </div>
           <p className="mt-2 text-[11px] text-fg/45">

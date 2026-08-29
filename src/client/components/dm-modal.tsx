@@ -72,8 +72,12 @@ export function DmModal({
     }
   }, [open]);
 
+  // Scroll to the newest message reliably once the pane renders
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const id = setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }, 80);
+    return () => clearTimeout(id);
   }, [messages?.length, convoId]);
 
   const activeConvo = convos?.find((c) => c.id === convoId) ?? null;

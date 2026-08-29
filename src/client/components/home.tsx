@@ -288,19 +288,19 @@ export function Home({
           {Array.from({ length: 2 }).map((_, i) => (
             <div key={i} className="flex items-center gap-12 whitespace-nowrap text-[12px] font-bold uppercase tracking-[0.32em]">
               <span className="text-cream/75">One Circle</span>
-              <Star size={12} className="text-flag-gold" />
+              <Star size={14} className="text-ink" outline />
               <span className="text-flag-gold">One Ghana</span>
-              <Star size={12} className="text-flag-red" />
+              <Star size={14} className="text-ink" outline />
               <span className="text-cream/75">Peace</span>
-              <Star size={12} className="text-flag-gold" />
+              <Star size={14} className="text-ink" outline />
               <span className="text-flag-gold">Progress</span>
-              <Star size={12} className="text-flag-green" />
+              <Star size={14} className="text-ink" outline />
               <span className="text-cream/75">Constitution Above All</span>
-              <Star size={12} className="text-flag-gold" />
+              <Star size={14} className="text-ink" outline />
               <span className="text-flag-gold">16 Regions</span>
-              <Star size={12} className="text-flag-red" />
+              <Star size={14} className="text-ink" outline />
               <span className="text-cream/75">Black Star Forever</span>
-              <Star size={12} className="text-flag-green" />
+              <Star size={14} className="text-ink" outline />
             </div>
           ))}
         </div>
