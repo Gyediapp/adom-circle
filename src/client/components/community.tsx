@@ -359,6 +359,12 @@ export function Community() {
       onError: (e: any) => toast(e?.message ?? "Failed to create poll", "error"),
     }),
   );
+  const closePoll = useMutation(
+    queryClient.polls.close.mutationOptions({
+      onSuccess: () => toast("Poll closed"),
+      onError: (e: any) => toast(e?.message ?? "Failed to close poll", "error"),
+    }),
+  );
   const createTask = useMutation(
     queryClient.projects.createTask.mutationOptions({
       onSuccess: () => {
@@ -703,9 +709,20 @@ export function Community() {
                         );
                       })}
                     </div>
-                    <p className="mt-2 text-[11px] font-semibold text-fg/40">
+                    <p className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-fg/40">
                       {total} {total === 1 ? "vote" : "votes"}
                       {!p.open && " · closed"}
+                      {me && (me.role === "admin" || me.role === "moderator") && p.open && (
+                        <button
+                          onClick={() =>
+                            me &&
+                            closePoll.mutate({ memberId: me.id, pollId: p.id })
+                          }
+                          className="rounded-full bg-soft px-2 py-0.5 text-[10px] font-bold text-fg/50 hover:text-flag-red cursor-pointer"
+                        >
+                          Close poll
+                        </button>
+                      )}
                     </p>
                   </Card>
                 );
@@ -817,13 +834,15 @@ export function Community() {
                                       </button>
                                     )}
                                   </div>
-                                  <button
-                                    onClick={() => me && deleteTask.mutate({ memberId: me.id, taskId: t.id })}
-                                    className="rounded-full p-1 text-fg/25 hover:text-flag-red cursor-pointer"
-                                    title="Delete task"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
+                                  {me && (me.role === "admin" || me.role === "moderator") && (
+                                    <button
+                                      onClick={() => me && deleteTask.mutate({ memberId: me.id, taskId: t.id })}
+                                      className="rounded-full p-1 text-fg/25 hover:text-flag-red cursor-pointer"
+                                      title="Delete task (moderator)"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             ))}

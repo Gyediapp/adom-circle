@@ -23,8 +23,13 @@ export type Room = z.output<typeof RoomSchema>;
 
 export const roomKV = createKV<Room>("rooms");
 
+// Existing rooms predate the allowAnonymous field — default the Health room
+// to anonymous-on (it's the room designed for it) without needing a reseed.
 function normalizeRoom(r: Room): Room {
-  return { ...r, allowAnonymous: r.allowAnonymous ?? false };
+  return {
+    ...r,
+    allowAnonymous: r.allowAnonymous ?? r.id === "room-health",
+  };
 }
 
 // ---------- Messages ----------

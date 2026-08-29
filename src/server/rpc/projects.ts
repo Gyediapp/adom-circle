@@ -300,6 +300,10 @@ export const projects = {
       const { memberKV } = await import("./members");
       const member = await memberKV.getItem(input.memberId);
       if (!member) throw new Error("Member not found. Please sign in.");
+      // Guardrail: only moderators/admins can delete tasks (members add/move)
+      if (member.role !== "admin" && member.role !== "moderator") {
+        throw new Error("Only moderators and admins can delete tasks.");
+      }
       await taskKV.removeItem(input.taskId);
     }),
 };

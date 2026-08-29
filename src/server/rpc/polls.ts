@@ -62,7 +62,16 @@ export const polls = {
       }),
     )
     .handler(async ({ input }) => {
-      await requireMember(input.memberId);
+      const member = await requireMember(input.memberId);
+      // Guardrail: max one poll per member per day
+      const dayStart = new Date();
+      dayStart.setUTCHours(0, 0, 0, 0);
+      const recent = (await pollKV.getAllItems()).filter(
+        (p) => p.createdBy === member.id && new Date(p.createdAt).getTime() >= dayStart.getTime(),
+      );
+      if (recent.length >= 1) {
+        throw new Error("You've already created a poll today — one poll per day per member.");
+      }
       const poll: Poll = {
         id: randomUUID(),
         roomId: input.roomId,
@@ -109,10 +118,13 @@ export const polls = {
     }),
 
   close: os
-    .input(z.object({ adminId: z.string(), pollId: z.string() }))
+    .input(z.object({ memberId: z.string(), pollId: z.string() }))
     .handler(async ({ input }) => {
-      const { requireAdmin } = await import("./members");
-      await requireAdmin(input.adminId);
+      const { requireMember: reqMember } = await import("./members");
+      const closer = await reqMember(input.memberId);
+      if (closer.role !== "admin" && closer.role !== "moderator") {
+        throw new Error("Only moderators and admins can close polls.");
+      }
       const raw = await pollKV.getItem(input.pollId);
       if (!raw) throw new Error("Poll not found");
       const updated = { ...normalizePoll(raw), open: false };
