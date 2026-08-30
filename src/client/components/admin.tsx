@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   FileText,
@@ -27,6 +27,7 @@ import {
   ShieldBan,
   ShieldCheck,
   BadgeCheck,
+  Check,
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
@@ -36,7 +37,7 @@ import { DeepSeekRateCard, DeepSeekStatusPill } from "./deepseek-card";
 import { captchaConfigured } from "@/client/lib/captcha";
 import { cn, timeAgo } from "@/client/lib/format";
 import { GHANA_REGIONS } from "@/server/data/regions";
-import type { Settings } from "@/server/rpc/site";
+import type { Settings, Post } from "@/server/rpc/site";
 import type { PublicMember } from "@/server/rpc/members";
 
 const TABS = [
@@ -1033,8 +1034,11 @@ function ProjectsManager() {
 
 function PostsManager() {
   const { user, toast } = useStore();
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ["posts", "list"] });
   const { data: posts } = useQuery(queryClient.posts.list.queryOptions());
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Post | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("News");
@@ -1042,35 +1046,64 @@ function PostsManager() {
   const [image, setImage] = useState("/output/images/hero.jpg");
   const [featured, setFeatured] = useState(false);
 
+  // Open the form for a new post (blank) or an existing one (pre-filled)
+  const openForm = (p?: Post) => {
+    setEditing(p ?? null);
+    setTitle(p?.title ?? "");
+    setBody(p?.body ?? "");
+    setCategory(p?.category ?? "News");
+    setAuthor(p?.author ?? user?.name ?? "");
+    setImage(p?.image ?? "/output/images/hero.jpg");
+    setFeatured(p?.featured ?? false);
+    setOpen(true);
+  };
+
   const create = useMutation(
     queryClient.posts.create.mutationOptions({
       onSuccess: () => {
         toast("Post published 📣");
         setOpen(false);
-        setTitle("");
-        setBody("");
+        refresh();
+      },
+      onError: (e: any) => toast(e?.message, "error"),
+    }),
+  );
+  const update = useMutation(
+    queryClient.posts.update.mutationOptions({
+      onSuccess: () => {
+        toast("Post updated ✏️");
+        setOpen(false);
+        refresh();
       },
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
   const toggle = useMutation(
     queryClient.posts.toggleFeatured.mutationOptions({
-      onSuccess: () => toast("Featured updated"),
+      onSuccess: () => {
+        toast("Featured updated");
+        refresh();
+      },
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
   const remove = useMutation(
     queryClient.posts.remove.mutationOptions({
-      onSuccess: () => toast("Post removed"),
+      onSuccess: () => {
+        toast("Post removed");
+        refresh();
+      },
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
+
+  const canSave = title.trim().length >= 3 && body.trim().length >= 10 && !create.isPending && !update.isPending;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-fg/55">Publish news, stories, civic & economy content to the site.</p>
-        <Button variant="dark" onClick={() => setOpen(true)}><Plus size={15} /> New post</Button>
+        <Button variant="dark" onClick={() => openForm()}><Plus size={15} /> New post</Button>
       </div>
 
       {posts?.map((p) => (
@@ -1081,6 +1114,13 @@ function PostsManager() {
             <p className="text-[12px] text-fg/45">{p.category} · by {p.author} · {timeAgo(p.createdAt)}</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => user && openForm(p)}
+              className="rounded-full p-2 text-fg/30 hover:text-flag-green hover:bg-flag-green/5 cursor-pointer"
+              title="Edit post"
+            >
+              <Pencil size={15} />
+            </button>
             <button
               onClick={() => user && toggle.mutate({ adminId: user.id, postId: p.id })}
               className={cn(
@@ -1093,6 +1133,7 @@ function PostsManager() {
             <button
               onClick={() => user && remove.mutate({ adminId: user.id, postId: p.id })}
               className="rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+              title="Delete post"
             >
               <Trash2 size={15} />
             </button>
@@ -1102,7 +1143,7 @@ function PostsManager() {
 
       {open && (
         <Card className="p-6">
-          <p className="mb-4 text-sm font-bold">New post</p>
+          <p className="mb-4 text-sm font-bold">{editing ? "Edit post" : "New post"}</p>
           <div className="space-y-4">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Post title"
               className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm font-semibold outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15" />
@@ -1118,20 +1159,24 @@ function PostsManager() {
               <Toggle checked={featured} onChange={setFeatured} label="Featured" />
             </div>
             <ImagePicker value={image} onChange={setImage} />
-            <Button
-              variant="dark"
-              className="w-full py-3"
-              disabled={create.isPending || title.trim().length < 3 || body.trim().length < 10}
-              onClick={() => {
-                if (!user) return;
-                create.mutate({
-                  adminId: user.id,
-                  post: { title, body, category: category as any, author, image, featured },
-                });
-              }}
-            >
-              {create.isPending ? <Loader2 size={16} className="animate-spin" /> : "Publish post"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="dark"
+                className="w-full py-3"
+                disabled={!canSave}
+                onClick={() => {
+                  if (!user) return;
+                  const post = { title: title.trim(), body: body.trim(), category: category as Post["category"], author, image, featured };
+                  if (editing) update.mutate({ adminId: user.id, postId: editing.id, post });
+                  else create.mutate({ adminId: user.id, post });
+                }}
+              >
+                {(create.isPending || update.isPending) ? <Loader2 size={16} className="animate-spin" /> : (editing ? "Save changes" : "Publish post")}
+              </Button>
+              <Button variant="ghost" className="px-5 py-3" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+            </div>
           </div>
         </Card>
       )}
@@ -1143,6 +1188,8 @@ function PostsManager() {
 
 function ModerationPanel() {
   const { user, toast } = useStore();
+  const qc = useQueryClient();
+  const refreshRooms = () => qc.invalidateQueries({ queryKey: ["community", "getRooms"] });
   const { data: reports } = useQuery(
     queryClient.community.getReports.queryOptions({
       input: { adminId: user?.id ?? "" },
@@ -1171,19 +1218,38 @@ function ModerationPanel() {
   );
   const pinRoom = useMutation(
     queryClient.community.togglePinRoom.mutationOptions({
-      onSuccess: () => toast("Room updated"),
+      onSuccess: () => {
+        toast("Room updated");
+        refreshRooms();
+      },
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
   const removeRoom = useMutation(
     queryClient.community.removeRoom.mutationOptions({
-      onSuccess: () => toast("Room removed"),
+      onSuccess: () => {
+        toast("Room removed");
+        refreshRooms();
+      },
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
   const setRoomFeature = useMutation(
     queryClient.community.setRoomFeature.mutationOptions({
-      onSuccess: () => toast("Room feature updated"),
+      onSuccess: () => {
+        toast("Room feature updated");
+        refreshRooms();
+      },
+      onError: (e: any) => toast(e?.message, "error"),
+    }),
+  );
+  const updateRoom = useMutation(
+    queryClient.community.updateRoom.mutationOptions({
+      onSuccess: () => {
+        toast("Room updated ✏️");
+        setEditingId(null);
+        refreshRooms();
+      },
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
@@ -1201,7 +1267,10 @@ function ModerationPanel() {
   );
   const createRoom = useMutation(
     queryClient.community.createRoom.mutationOptions({
-      onSuccess: () => toast("Room created 🎉"),
+      onSuccess: () => {
+        toast("Room created 🎉");
+        refreshRooms();
+      },
       onError: (e: any) => toast(e?.message, "error"),
     }),
   );
@@ -1210,6 +1279,11 @@ function ModerationPanel() {
   const [roomName, setRoomName] = useState("");
   const [roomDesc, setRoomDesc] = useState("");
   const [roomIcon, setRoomIcon] = useState("💬");
+  // Editing an existing room — name/description/icon can be changed in place
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editIcon, setEditIcon] = useState("");
 
   return (
     <div className="space-y-6">
@@ -1293,33 +1367,92 @@ function ModerationPanel() {
           {rooms?.map((r) => (
             <div key={r.id} className="flex items-center gap-3 p-4">
               <span className="text-xl">{r.icon}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold">{r.name} {r.pinned && <Pin size={11} className="inline text-flag-red" />}</p>
-                <p className="truncate text-[12px] text-fg/45">{r.description} · {r.messageCount} messages</p>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {(["polls", "kanban", "anonymous"] as const).map((f) => {
-                    const on = (r.features ?? []).includes(f);
-                    return (
-                      <button
-                        key={f}
-                        onClick={() =>
-                          user &&
-                          setRoomFeature.mutate({ adminId: user.id, roomId: r.id, feature: f, enabled: !on })
-                        }
-                        className={cn(
-                          "rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors cursor-pointer",
-                          on
-                            ? "border-flag-green bg-flag-green text-cream"
-                            : "border-fg/15 bg-card text-fg/45 hover:border-flag-green",
-                        )}
-                        title={`${on ? "Disable" : "Enable"} ${f}`}
-                      >
-                        {f}
-                      </button>
-                    );
-                  })}
+              {editingId === r.id ? (
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={editIcon}
+                      onChange={(e) => setEditIcon(e.target.value)}
+                      className="w-12 rounded-xl border border-fg/15 bg-card px-2 py-1.5 text-center text-lg outline-none"
+                    />
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Room name"
+                      className="flex-1 rounded-xl border border-flag-gold/50 bg-card px-3 py-1.5 text-sm font-semibold outline-none focus:border-flag-gold"
+                    />
+                  </div>
+                  <input
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
+                    placeholder="Short description"
+                    className="w-full rounded-xl border border-fg/15 bg-card px-3 py-1.5 text-sm outline-none"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="dark"
+                      className="px-4 py-1.5 text-xs"
+                      disabled={updateRoom.isPending || editName.trim().length < 2}
+                      onClick={() =>
+                        user &&
+                        updateRoom.mutate({
+                          adminId: user.id,
+                          roomId: r.id,
+                          name: editName.trim(),
+                          description: editDesc.trim(),
+                          icon: editIcon.trim(),
+                        })
+                      }
+                    >
+                      {updateRoom.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      Save
+                    </Button>
+                    <Button variant="ghost" className="px-4 py-1.5 text-xs" onClick={() => setEditingId(null)}>
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold">{r.name} {r.pinned && <Pin size={11} className="inline text-flag-red" />}</p>
+                  <p className="truncate text-[12px] text-fg/45">{r.description} · {r.messageCount} messages</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {(["polls", "kanban", "anonymous"] as const).map((f) => {
+                      const on = (r.features ?? []).includes(f);
+                      return (
+                        <button
+                          key={f}
+                          onClick={() =>
+                            user &&
+                            setRoomFeature.mutate({ adminId: user.id, roomId: r.id, feature: f, enabled: !on })
+                          }
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors cursor-pointer",
+                            on
+                              ? "border-flag-green bg-flag-green text-cream"
+                              : "border-fg/15 bg-card text-fg/45 hover:border-flag-green",
+                          )}
+                          title={`${on ? "Disable" : "Enable"} ${f}`}
+                        >
+                          {f}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setEditingId(r.id);
+                  setEditName(r.name);
+                  setEditDesc(r.description);
+                  setEditIcon(r.icon);
+                }}
+                className="rounded-full p-2 text-fg/30 hover:text-flag-green hover:bg-flag-green/5 cursor-pointer"
+                title="Edit room"
+              >
+                <Pencil size={15} />
+              </button>
               <button
                 onClick={() => user && pinRoom.mutate({ adminId: user.id, roomId: r.id })}
                 className={cn("rounded-full p-2 cursor-pointer", r.pinned ? "text-flag-red bg-flag-red/8" : "text-fg/30 hover:text-fg")}
@@ -1330,6 +1463,7 @@ function ModerationPanel() {
               <button
                 onClick={() => user && removeRoom.mutate({ adminId: user.id, roomId: r.id })}
                 className="rounded-full p-2 text-fg/30 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+                title="Delete room"
               >
                 <Trash2 size={15} />
               </button>

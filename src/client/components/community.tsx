@@ -1060,8 +1060,9 @@ export function Community() {
                   </div>
                 )}
                 {audioData ? (
-                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-soft px-3 py-2">
-                    <audio controls src={audioData} className="h-9 w-full min-w-0 flex-1 sm:w-64 sm:flex-none" />
+                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-cream px-3 py-2 ring-1 ring-ink/15">
+                    <Mic size={14} className="shrink-0 text-flag-red" />
+                    <audio controls src={audioData} className="h-9 w-full min-w-0 flex-1 sm:w-64 sm:flex-none [&::-webkit-media-controls-panel]:bg-cream" />
                     <Button
                       variant="dark"
                       className="rounded-full px-4 py-1.5 text-xs"
@@ -1478,12 +1479,17 @@ function ChatMessage({
               )}
             >
               {m.audio && (
-                <audio
-                  controls
-                  src={m.audio}
-                  preload="none"
-                  className="mb-1.5 h-10 w-full max-w-[240px] rounded-xl sm:w-64"
-                />
+                <div className="mb-1.5 rounded-xl bg-cream p-1.5 ring-1 ring-ink/15">
+                  <p className="flex items-center gap-1 px-1 pt-0.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-fg/55">
+                    <Mic size={10} className="text-flag-red" /> Voice message
+                  </p>
+                  <audio
+                    controls
+                    src={m.audio}
+                    preload="none"
+                    className="h-10 w-full max-w-[240px] rounded-lg sm:w-64 [&::-webkit-media-controls-panel]:bg-cream"
+                  />
+                </div>
               )}
               {m.text && <MentionText text={m.text} mentions={m.mentions ?? []} />}
               {m.pending && (

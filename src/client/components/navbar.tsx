@@ -14,6 +14,7 @@ import { queryClient } from "@/client/rpc-client";
 export type Tab =
   | "home"
   | "community"
+  | "blog"
   | "projects"
   | "events"
   | "civic"
@@ -24,6 +25,7 @@ export type Tab =
 const LINKS: Array<{ tab: Tab; key: string }> = [
   { tab: "home", key: "home" },
   { tab: "community", key: "community" },
+  { tab: "blog", key: "blog" },
   { tab: "projects", key: "projects" },
   { tab: "events", key: "events" },
   { tab: "civic", key: "civic" },

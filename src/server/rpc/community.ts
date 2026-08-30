@@ -290,6 +290,31 @@ export const community = {
       await roomKV.setItem(room.id, updated);
       return updated;
     }),
+  updateRoom: os
+    .input(
+      z.object({
+        adminId: z.string(),
+        roomId: z.string(),
+        name: z.string(),
+        description: z.string(),
+        icon: z.string(),
+        color: z.string().optional(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      await requireAdmin(input.adminId);
+      const room = await roomKV.getItem(input.roomId);
+      if (!room) throw new Error("Room not found");
+      const updated: Room = {
+        ...normalizeRoom(room),
+        name: input.name.trim() || room.name,
+        description: input.description.trim() || room.description,
+        icon: input.icon.trim() || room.icon,
+        color: input.color?.trim() || room.color,
+      };
+      await roomKV.setItem(updated.id, updated);
+      return updated;
+    }),
   removeRoom: os
     .input(z.object({ adminId: z.string(), roomId: z.string() }))
     .handler(async ({ input }) => {

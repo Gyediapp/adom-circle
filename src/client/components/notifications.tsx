@@ -10,6 +10,7 @@ import {
   CheckCheck,
   Trash2,
   Sparkles,
+  X,
 } from "lucide-react";
 import { queryClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
@@ -78,8 +79,15 @@ export function NotificationBell({
     const onClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   if (!user) return null;
@@ -102,7 +110,7 @@ export function NotificationBell({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 z-[70] w-[min(92vw,360px)] overflow-hidden rounded-3xl border border-ink/10 bg-card shadow-2xl animate-fade-up">
+        <div className="absolute right-0 top-full mt-2 z-[70] w-[min(92vw,360px)] overflow-hidden rounded-3xl border border-ink/10 bg-card shadow-2xl animate-fade-up">
           <div className="flex items-center justify-between border-b border-ink/10 px-4 py-3">
             <p className="text-sm font-bold">Notifications</p>
             <div className="flex items-center gap-1">
@@ -120,10 +128,18 @@ export function NotificationBell({
               >
                 <Trash2 size={15} />
               </button>
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-full p-1.5 text-fg/45 hover:text-fg hover:bg-ink/5 cursor-pointer"
+                title="Close"
+                aria-label="Close notifications"
+              >
+                <X size={15} />
+              </button>
             </div>
           </div>
 
-          <div className="max-h-[380px] overflow-y-auto">
+          <div className="max-h-[min(70vh,400px)] overflow-y-auto overscroll-contain">
             {(!items || items.length === 0) && (
               <p className="px-6 py-10 text-center text-sm text-fg/45">
                 No notifications yet. Join a discussion or RSVP to an event! 🇬🇭

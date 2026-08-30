@@ -13,6 +13,7 @@ import { Events } from "@/client/components/events";
 import { Civic } from "@/client/components/civic";
 import { Economy } from "@/client/components/economy";
 import { About } from "@/client/components/about";
+import { Blog } from "@/client/components/blog";
 import { Admin } from "@/client/components/admin";
 import { LogoMark, Star } from "@/client/lib/logo";
 import { LangProvider, useI18n } from "@/client/lib/i18n";
@@ -21,6 +22,7 @@ import { cn } from "@/client/lib/format";
 const VALID_TABS: Tab[] = [
   "home",
   "community",
+  "blog",
   "projects",
   "events",
   "civic",
@@ -45,6 +47,12 @@ function Shell() {
   const [verifying, setVerifying] = useState(false);
 
   const { data: settings } = useQuery(queryClient.site.get.queryOptions());
+
+  // Ticker: never disappear even if old stored settings lack the field — the
+  // server merges defaults, this is a belt-and-braces client fallback.
+  const TICKER_FALLBACK = "Register to vote · Know the Constitution · Peace is everyone's duty 🇬🇭";
+  const tickerText = settings?.ticker?.text || TICKER_FALLBACK;
+  const showTicker = settings ? (settings.ticker?.enabled ?? true) : true;
 
   // PWA: register service worker
   useEffect(() => {
@@ -97,15 +105,13 @@ function Shell() {
     <div className="min-h-screen">
       {/* Fixed header stack: ticker + announcement + navbar */}
       <div className="fixed inset-x-0 top-0 z-50">
-        {settings?.ticker?.enabled && settings.ticker.text && (
-          <div className="relative z-10 overflow-hidden bg-ink py-1.5 text-cream">
-            <div className="flex w-max animate-marquee gap-8">
+        {showTicker && tickerText && (
+          <div className="group relative z-10 overflow-hidden bg-ink py-1.5 text-cream">
+            <div className="flex w-max animate-marquee group-hover:[animation-play-state:paused]">
               {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-8 whitespace-nowrap text-[12px] font-semibold tracking-wide">
-                  <Star size={11} className="text-flag-gold" aria-hidden />
-                  <span>{settings.ticker.text}</span>
-                  <Star size={11} className="text-flag-gold" aria-hidden />
-                  <span>{settings.ticker.text}</span>
+                <div key={i} className="flex items-center whitespace-nowrap pr-10 text-[12px] font-semibold tracking-wide">
+                  <Star size={11} className="mx-2.5 text-flag-gold" aria-hidden />
+                  <span>{tickerText}</span>
                 </div>
               ))}
             </div>
@@ -153,6 +159,7 @@ function Shell() {
         <ErrorBoundary>
           {tab === "home" && <Home onTab={onTab} onAuth={onAuth} />}
           {tab === "community" && <Community />}
+          {tab === "blog" && <Blog />}
           {tab === "projects" && <Projects />}
           {tab === "events" && <Events />}
           {tab === "civic" && <Civic />}

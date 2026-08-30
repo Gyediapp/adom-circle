@@ -193,6 +193,25 @@ export const posts = {
       return post;
     }),
 
+  update: os
+    .input(
+      z.object({
+        adminId: z.string(),
+        postId: z.string(),
+        post: PostSchema.omit({ id: true, createdAt: true }),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const { memberKV } = await import("./members");
+      const admin = await memberKV.getItem(input.adminId);
+      if (!admin || admin.role !== "admin") throw new Error("Admin access required");
+      const existing = await postKV.getItem(input.postId);
+      if (!existing) throw new Error("Post not found");
+      const updated: Post = { ...existing, ...input.post };
+      await postKV.setItem(updated.id, updated);
+      return updated;
+    }),
+
   toggleFeatured: os
     .input(z.object({ adminId: z.string(), postId: z.string() }))
     .handler(async ({ input }) => {

@@ -739,11 +739,15 @@ export function Home({
       {/* ================= STORIES / NEWS ================= */}
       <section id="stories" className="scroll-mt-28 bg-soft py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <SectionHeading
-            eyebrow="From the circle"
-            title={<>Stories & <span className="text-flag-red">updates</span></>}
-            className="mb-12"
-          />
+          <div className="mb-12 flex flex-wrap items-end justify-between gap-4">
+            <SectionHeading
+              eyebrow="From the circle"
+              title={<>Stories & <span className="text-flag-red">updates</span></>}
+            />
+            <Button variant="outline" className="shrink-0" onClick={() => go("blog")}>
+              Read the blog <ArrowRight size={15} />
+            </Button>
+          </div>
           <div className="grid gap-6 md:grid-cols-3">
             {(posts ?? []).slice(0, 3).map((post) => (
               <Card key={post.id} hover className="overflow-hidden">

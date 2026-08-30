@@ -20,6 +20,7 @@ type Dict = Record<string, string>;
 const en: Dict = {
   home: "Home",
   community: "Community",
+  blog: "Blog",
   projects: "Projects",
   events: "Events",
   civic: "Civic",
@@ -47,6 +48,7 @@ const en: Dict = {
 const tw: Dict = {
   home: "Fie",
   community: "Kuw",
+  blog: "Nsɛm",
   projects: "Adwumayɛ",
   events: "Nhyiamu",
   civic: "Ɔman Adwuma",
@@ -74,6 +76,7 @@ const tw: Dict = {
 const ga: Dict = {
   home: "Shia",
   community: "Asafo",
+  blog: "Sanei",
   projects: "Nitsumɔi",
   events: "Hei",
   civic: "Maŋ Sane",
@@ -101,6 +104,7 @@ const ga: Dict = {
 const ee: Dict = {
   home: "Aƒe",
   community: "Habɔbɔ",
+  blog: "Nyadzɔdzɔwo",
   projects: "Dɔwɔwɔwo",
   events: "Kpekpewo",
   civic: "Dukɔ",
