@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useState, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, AlertCircle, ArrowUp, ShieldAlert, Mail } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
@@ -105,18 +105,7 @@ function Shell() {
     <div className="min-h-screen">
       {/* Fixed header stack: ticker + announcement + navbar */}
       <div className="fixed inset-x-0 top-0 z-50">
-        {showTicker && tickerText && (
-          <div className="group relative z-10 overflow-hidden bg-ink py-1.5 text-cream">
-            <div className="flex w-max animate-marquee group-hover:[animation-play-state:paused]">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="flex items-center whitespace-nowrap pr-10 text-[12px] font-semibold tracking-wide">
-                  <Star size={11} className="mx-2.5 text-flag-gold" aria-hidden />
-                  <span>{tickerText}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {showTicker && tickerText && <Ticker text={tickerText} />}
         {settings?.announcement.enabled && (
           <div className="flag-stripes flex items-center justify-center gap-2 px-4 py-2 text-center text-[12.5px] font-bold tracking-wide text-ink">
             <Star size={13} className="shrink-0" aria-hidden />
@@ -234,7 +223,64 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
-function BackToTop() {  const [show, setShow] = useState(false);
+// Self-driven scrolling ticker. Animated with requestAnimationFrame instead of
+// CSS so it can't be disabled by prefers-reduced-motion or missing Tailwind
+// classes — the ticker always scrolls. Pauses while the pointer hovers it.
+function Ticker({ text }: { text: string }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    let raf = 0;
+    let x = 0;
+    let last = performance.now();
+    let paused = false;
+    const SPEED = 42; // pixels per second
+    const step = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 0.1); // clamp tab-switch jumps
+      last = now;
+      if (!paused) {
+        x -= SPEED * dt;
+        const half = el.scrollWidth / 2;
+        // Loop seamlessly: the content is 4 identical copies, so resetting at
+        // the halfway point (2 copies) joins perfectly.
+        if (half > 0 && -x >= half) x += half;
+        el.style.transform = `translate3d(${x}px,0,0)`;
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    const onEnter = () => (paused = true);
+    const onLeave = () => (paused = false);
+    el.addEventListener("mouseenter", onEnter);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener("mouseenter", onEnter);
+      el.removeEventListener("mouseleave", onLeave);
+    };
+  }, [text]);
+
+  return (
+    <div className="relative z-10 overflow-hidden bg-ink py-1.5 text-cream">
+      <div
+        ref={trackRef}
+        className="flex w-max items-center whitespace-nowrap text-[12px] font-semibold tracking-wide will-change-transform"
+      >
+        {Array.from({ length: 4 }).map((_, i) => (
+          <span key={i} className="flex items-center">
+            <Star size={11} className="mx-2.5 text-flag-gold" aria-hidden />
+            <span>{text}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BackToTop() {
+  const [show, setShow] = useState(false);
   useEffect(() => {
     const onScroll = () => setShow(window.scrollY > 600);
     window.addEventListener("scroll", onScroll);
