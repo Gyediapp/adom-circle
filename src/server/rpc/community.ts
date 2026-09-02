@@ -60,6 +60,7 @@ export const MessageSchema = z.object({
   deleted: z.boolean(),
   mentions: z.array(z.object({ id: z.string(), name: z.string() })),
   audio: z.string().nullable(),
+  hasAudio: z.boolean().optional(),
   anonymous: z.boolean(),
   pending: z.boolean(),
   failed: z.boolean(),
@@ -68,6 +69,39 @@ export const MessageSchema = z.object({
 export type Message = z.output<typeof MessageSchema>;
 
 export const messageKV = createKV<Message>("messages");
+
+// Voice messages are stored OUTSIDE the message rows (keyed by message id) so
+// that listing/fetching chat never moves the audio bytes. Clients fetch one
+// voice note on demand via getMessageAudio — this is the single biggest
+// bandwidth/egress saver for Supabase-backed deployments.
+export const messageAudioKV = createKV<string>("message-audio");
+
+// Legacy messages (before this change) carried their audio inline. Move those
+// blobs into the separate collection once, then keep the rows slim.
+let audioMigrationStarted = false;
+function startAudioMigration() {
+  if (audioMigrationStarted) return;
+  audioMigrationStarted = true;
+  void (async () => {
+    try {
+      for (const raw of await messageKV.getAllItems()) {
+        const m = normalizeMessage(raw);
+        if (m.audio && !m.hasAudio) {
+          await messageAudioKV.setItem(m.id, m.audio);
+          await messageKV.setItem(m.id, { ...m, audio: null, hasAudio: true });
+        }
+      }
+    } catch {
+      // non-fatal — migration retries on next boot
+    }
+  })();
+}
+
+// Public shape of a message: the payload is a tiny placeholder + flag, never
+// the audio blob itself.
+function toPublicMessage(m: Message): Message & { hasAudio: boolean } {
+  return { ...m, audio: null, hasAudio: m.hasAudio ?? Boolean(m.audio) };
+}
 
 // Old stored messages predate reactions/replies — fill safe defaults on read
 function normalizeMessage(m: Message): Message {
@@ -80,6 +114,7 @@ function normalizeMessage(m: Message): Message {
     deleted: m.deleted ?? false,
     mentions: m.mentions ?? [],
     audio: m.audio ?? null,
+    hasAudio: m.hasAudio ?? Boolean(m.audio),
     anonymous: m.anonymous ?? false,
     sentAt: m.sentAt ?? m.createdAt,
     pending: m.pending ?? false,
@@ -171,7 +206,8 @@ const getMessages = os
       .filter((m) => m.roomId === input.roomId)
       .map(normalizeMessage)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .slice(-80);
+      .slice(-80)
+      .map(toPublicMessage);
     return withAuthorInfo(msgs);
   });
 
@@ -214,10 +250,12 @@ const getThread = os.input(z.object({ threadId: z.string() })).handler(async ({ 
   return { thread: (await withAuthorInfo([normalizeThread(thread)]))[0], replies: await withAuthorInfo(replies) };
 });
 
+// Move legacy inline audio into the separate collection (once per boot until done)
+startAudioMigration();
+
 export const community = {
   // rooms
-  getRooms,
-  createRoom: os
+  getRooms,  createRoom: os
     .input(
       z.object({
         adminId: z.string(),
@@ -425,18 +463,22 @@ export const community = {
         editedAt: null,
         deleted: false,
         mentions,
-        audio: input.audio ?? null,
+        audio: null,
+        hasAudio: Boolean(input.audio),
         anonymous,
         pending: false,
         failed: false,
       };
+      // Persist the audio blob separately first so a failed message write never
+      // leaves a hasAudio flag pointing at a missing blob (upsert is safe).
+      if (input.audio) await messageAudioKV.setItem(message.id, input.audio);
       await messageKV.setItem(message.id, message);
       // If this confirms an optimistically-pending message, drop the pending copy
       if (input.confirmPending && input.confirmPending !== message.id) {
         await messageKV.removeItem(input.confirmPending).catch(() => {});
       }
       await addPoints(member.id, POINTS.MESSAGE);
-      return message;
+      return toPublicMessage(message);
     }),
   addReaction: os
     .input(
@@ -460,7 +502,7 @@ export const community = {
       if (reactions[input.type].length === 0) delete reactions[input.type];
       const updated = { ...message, reactions };
       await messageKV.setItem(updated.id, updated);
-      return updated;
+      return toPublicMessage(updated);
     }),
   toggleSaveMessage: os
     .input(z.object({ memberId: z.string(), messageId: z.string() }))
@@ -495,7 +537,22 @@ export const community = {
       const ids = member?.savedMessages ?? [];
       if (ids.length === 0) return [];
       const all = (await messageKV.getAllItems()).map(normalizeMessage);
-      return withAuthorInfo(all.filter((m) => ids.includes(m.id)));
+      return withAuthorInfo(all.filter((m) => ids.includes(m.id)).map(toPublicMessage));
+    }),
+  // Fetch a single voice message's audio on demand (only when the user taps
+  // play). Message lists carry just a hasAudio flag — never the payload.
+  getMessageAudio: os
+    .input(z.object({ messageId: z.string() }))
+    .handler(async ({ input }) => {
+      const raw = await messageKV.getItem(input.messageId);
+      if (!raw) return { audio: null };
+      const m = normalizeMessage(raw);
+      if (m.deleted) return { audio: null };
+      if (m.hasAudio) {
+        const stored = await messageAudioKV.getItem(m.id);
+        return { audio: stored ?? null };
+      }
+      return { audio: m.audio ?? null };
     }),
   editMessage: os
     .input(
@@ -520,7 +577,7 @@ export const community = {
         editedAt: new Date().toISOString(),
       };
       await messageKV.setItem(updated.id, updated);
-      return updated;
+      return toPublicMessage(updated);
     }),
   deleteMessage: os
     .input(z.object({ memberId: z.string(), messageId: z.string() }))
@@ -541,7 +598,9 @@ export const community = {
         savedBy: [],
         mentions: [],
         audio: null,
+        hasAudio: false,
       });
+      await messageAudioKV.removeItem(message.id).catch(() => {});
     }),
 
   // forum

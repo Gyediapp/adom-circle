@@ -21,6 +21,7 @@ import {
   Pencil,
   Mic,
   Square,
+  Play,
   CheckCircle2,
   RefreshCw,
 } from "lucide-react";
@@ -37,7 +38,7 @@ import { ShareModal, type ShareTarget } from "./share-modal";
 import { MemberModal } from "./member-modal";
 import { BarChart3, Kanban, SmilePlus } from "lucide-react";
 
-type ChatMsg = Message & { authorPoints: number; authorRole: string };
+type ChatMsg = Message & { authorPoints: number; authorRole: string; hasAudio: boolean };
 
 const REACTIONS: Array<{ type: ReactionType; emoji: string; label: string }> = [
   { type: "like", emoji: "👍", label: "Like" },
@@ -166,6 +167,10 @@ export function Community() {
   const sendMessage = useMutation(
     queryClient.community.sendMessage.mutationOptions({
       onSuccess: (saved, vars) => {
+        // Cache the blob we just uploaded under the server's message id so the
+        // confirmed copy plays instantly from cache (the server never sends
+        // audio back in message lists).
+        if (vars.audio && saved?.id) audioCache.set(saved.id, vars.audio);
         setText("");
         setReplyingTo(null);
         setMentionIds([]);
@@ -206,6 +211,7 @@ export function Community() {
       deleted: false,
       mentions: [],
       audio: audioData,
+      hasAudio: Boolean(audioData),
       anonymous,
       pending: true,
       failed: false,
@@ -575,7 +581,7 @@ export function Community() {
   };
 
   const shareMessage = (m: ChatMsg) => {
-    if (!m.text && !m.audio) return;
+    if (!m.text && !m.audio && !m.hasAudio) return;
     setShareTarget({
       text: m.text || "🎤 Voice message",
       authorName: m.authorName,
@@ -1345,6 +1351,92 @@ export function Community() {
 
 // ---------- Single chat message with reactions + actions ----------
 
+// Cache of fetched voice payloads by message id — a note is downloaded once
+// per session, even if it scrolls out of view and back.
+const audioCache = new Map<string, string>();
+
+// Lazy voice message: message lists only carry a hasAudio flag. Tapping play
+// fetches that one note from the server (getMessageAudio) and then shows the
+// player. Just-sent notes play instantly from the local cache.
+function VoiceMessage({
+  messageId,
+  hasAudio,
+  audio,
+  mine,
+}: {
+  messageId: string;
+  hasAudio: boolean;
+  audio: string | null;
+  mine: boolean;
+}) {
+  const [src, setSrc] = useState<string | null>(() => audio ?? audioCache.get(messageId) ?? null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  const load = async () => {
+    if (src || loading) return;
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await rpcClient.community.getMessageAudio({ messageId });
+      if (res?.audio) {
+        audioCache.set(messageId, res.audio);
+        setSrc(res.audio);
+      } else {
+        setError(true);
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "mb-1.5 rounded-xl p-1.5 ring-1",
+        mine ? "bg-cream ring-ink/15" : "bg-soft ring-fg/10",
+      )}
+    >
+      <p className="flex items-center gap-1 px-1 pt-0.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-fg/55">
+        <Mic size={10} className="text-flag-red" /> Voice message
+      </p>
+      {src ? (
+        <audio
+          controls
+          autoPlay={!audio}
+          src={src}
+          preload="metadata"
+          className="h-10 w-full max-w-[240px] rounded-lg sm:w-64 [&::-webkit-media-controls-panel]:bg-cream"
+        />
+      ) : loading ? (
+        <button
+          disabled
+          className="flex items-center gap-1.5 rounded-lg bg-ink/5 px-3 py-1.5 text-xs font-bold text-fg/50"
+        >
+          <Loader2 size={13} className="animate-spin" /> Loading…
+        </button>
+      ) : error ? (
+        <button
+          onClick={load}
+          className="flex items-center gap-1.5 rounded-lg bg-flag-red/10 px-3 py-1.5 text-xs font-bold text-flag-red hover:bg-flag-red/20 cursor-pointer"
+        >
+          <RefreshCw size={13} /> Tap to retry
+        </button>
+      ) : (
+        <button
+          onClick={load}
+          className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-cream hover:bg-ink-2 transition-colors cursor-pointer"
+          title="Play voice message"
+        >
+          <Play size={13} className="fill-current" /> Play voice message
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ChatMessage({
   m,
   me,
@@ -1478,18 +1570,8 @@ function ChatMessage({
                 (m.pending || m.failed) && "opacity-70",
               )}
             >
-              {m.audio && (
-                <div className="mb-1.5 rounded-xl bg-cream p-1.5 ring-1 ring-ink/15">
-                  <p className="flex items-center gap-1 px-1 pt-0.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-fg/55">
-                    <Mic size={10} className="text-flag-red" /> Voice message
-                  </p>
-                  <audio
-                    controls
-                    src={m.audio}
-                    preload="none"
-                    className="h-10 w-full max-w-[240px] rounded-lg sm:w-64 [&::-webkit-media-controls-panel]:bg-cream"
-                  />
-                </div>
+              {(m.audio || m.hasAudio) && (
+                <VoiceMessage messageId={m.id} hasAudio={Boolean(m.hasAudio)} audio={m.audio} mine={mine} />
               )}
               {m.text && <MentionText text={m.text} mentions={m.mentions ?? []} />}
               {m.pending && (
