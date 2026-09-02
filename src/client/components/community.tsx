@@ -1371,19 +1371,23 @@ function VoiceMessage({
 }) {
   const [src, setSrc] = useState<string | null>(() => audio ?? audioCache.get(messageId) ?? null);
   const [loading, setLoading] = useState(false);
+  // Network/server failure → retryable
   const [error, setError] = useState(false);
+  // Server said there is genuinely no audio (deleted/missing) → not retryable
+  const [unavailable, setUnavailable] = useState(false);
 
   const load = async () => {
     if (src || loading) return;
     setLoading(true);
     setError(false);
+    setUnavailable(false);
     try {
       const res = await rpcClient.community.getMessageAudio({ messageId });
       if (res?.audio) {
         audioCache.set(messageId, res.audio);
         setSrc(res.audio);
       } else {
-        setError(true);
+        setUnavailable(true);
       }
     } catch {
       setError(true);
@@ -1424,6 +1428,10 @@ function VoiceMessage({
         >
           <RefreshCw size={13} /> Tap to retry
         </button>
+      ) : unavailable ? (
+        <span className="flex items-center gap-1.5 rounded-lg bg-ink/5 px-3 py-1.5 text-xs font-bold text-fg/45">
+          <Mic size={12} /> Voice message unavailable
+        </span>
       ) : (
         <button
           onClick={load}

@@ -84,15 +84,22 @@ function startAudioMigration() {
   audioMigrationStarted = true;
   void (async () => {
     try {
+      let moved = 0;
       for (const raw of await messageKV.getAllItems()) {
-        const m = normalizeMessage(raw);
-        if (m.audio && !m.hasAudio) {
-          await messageAudioKV.setItem(m.id, m.audio);
-          await messageKV.setItem(m.id, { ...m, audio: null, hasAudio: true });
+        // Check the RAW record: legacy rows have inline `audio` and NO
+        // `hasAudio` field. (normalizeMessage() can't be used here — it
+        // derives hasAudio=true from the inline audio, which would make
+        // this condition never true.)
+        if (raw.audio && !raw.hasAudio) {
+          await messageAudioKV.setItem(raw.id, raw.audio);
+          await messageKV.setItem(raw.id, { ...raw, audio: null, hasAudio: true });
+          moved++;
         }
       }
-    } catch {
-      // non-fatal — migration retries on next boot
+      if (moved > 0) console.log(`[audio] moved ${moved} legacy voice message(s) to separate storage`);
+    } catch (err) {
+      // Non-fatal — getMessageAudio lazily migrates inline audio on first play.
+      console.error("[audio] legacy voice migration failed (lazy fallback active):", err);
     }
   })();
 }
@@ -548,10 +555,27 @@ export const community = {
       if (!raw) return { audio: null };
       const m = normalizeMessage(raw);
       if (m.deleted) return { audio: null };
+      // New messages keep their audio in the separate store.
       if (m.hasAudio) {
         const stored = await messageAudioKV.getItem(m.id);
-        return { audio: stored ?? null };
+        if (stored) return { audio: stored };
+        // hasAudio is set but no blob in the store — either a legacy message
+        // the boot migration hasn't reached yet, or the blob is missing.
+        // Fall back to inline audio if present (legacy), else report missing.
+        if (m.audio) {
+          // Opportunistic lazy migration: persist it now so the next play is
+          // a cheap store read, then slim the row.
+          try {
+            await messageAudioKV.setItem(m.id, m.audio);
+            await messageKV.setItem(m.id, { ...m, audio: null, hasAudio: true });
+          } catch {
+            // non-fatal — the inline copy still plays below
+          }
+          return { audio: m.audio };
+        }
+        return { audio: null };
       }
+      // No flag and no inline audio — nothing to play.
       return { audio: m.audio ?? null };
     }),
   editMessage: os
