@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Send,
@@ -1356,9 +1356,22 @@ export function Community() {
 const audioCache = new Map<string, string>();
 
 // Lazy voice message: message lists only carry a hasAudio flag. Tapping play
-// fetches that one note from the server (getMessageAudio) and then shows the
-// player. Just-sent notes play instantly from the local cache.
-function VoiceMessage({
+// fetches that one note from the server (getMessageAudio), then a small
+// explicitly-controlled player takes over.
+//
+// Playback is driven by our own button + an <audio> ref (play()/pause()) —
+// deliberately NOT the native controls or autoPlay. Relying on native
+// autoplay caused a desktop bug where a note couldn't be stopped mid-play
+// (the element lived inside a chat list that re-renders on every live poll).
+// Memoised so list re-renders never touch a playing note.
+let activeAudio: HTMLAudioElement | null = null; // only one voice note plays at a time
+
+function fmtTime(sec: number): string {
+  const s = Math.max(0, Math.floor(sec || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+const VoiceMessage = memo(function VoiceMessage({
   messageId,
   hasAudio,
   audio,
@@ -1369,32 +1382,83 @@ function VoiceMessage({
   audio: string | null;
   mine: boolean;
 }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [src, setSrc] = useState<string | null>(() => audio ?? audioCache.get(messageId) ?? null);
   const [loading, setLoading] = useState(false);
   // Network/server failure → retryable
   const [error, setError] = useState(false);
   // Server said there is genuinely no audio (deleted/missing) → not retryable
   const [unavailable, setUnavailable] = useState(false);
+  // True while a fetch is in flight because the user tapped play — start
+  // playback automatically the moment the note is ready.
+  const [wantPlay, setWantPlay] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [cur, setCur] = useState(0);
+  const [dur, setDur] = useState(0);
 
   const load = async () => {
     if (src || loading) return;
     setLoading(true);
     setError(false);
     setUnavailable(false);
+    setWantPlay(true);
     try {
       const res = await rpcClient.community.getMessageAudio({ messageId });
       if (res?.audio) {
         audioCache.set(messageId, res.audio);
         setSrc(res.audio);
       } else {
+        setWantPlay(false);
         setUnavailable(true);
       }
     } catch {
+      setWantPlay(false);
       setError(true);
     } finally {
       setLoading(false);
     }
   };
+
+  const start = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (activeAudio && activeAudio !== el) {
+      try {
+        activeAudio.pause();
+      } catch {
+        // ignore
+      }
+    }
+    activeAudio = el;
+    el.play().catch(() => setPlaying(false));
+  };
+
+  const toggle = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (el.paused) {
+      // Allow replay after the note has finished.
+      try {
+        if (el.ended) el.currentTime = 0;
+      } catch {
+        // ignore
+      }
+      start();
+    } else {
+      el.pause();
+    }
+  };
+
+  // Once the note is loaded after the user tapped play, start it.
+  useEffect(() => {
+    if (src && wantPlay) {
+      setWantPlay(false);
+      start();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, wantPlay]);
+
+  const pct = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0;
 
   return (
     <div
@@ -1407,13 +1471,43 @@ function VoiceMessage({
         <Mic size={10} className="text-flag-red" /> Voice message
       </p>
       {src ? (
-        <audio
-          controls
-          autoPlay={!audio}
-          src={src}
-          preload="metadata"
-          className="h-10 w-full max-w-[240px] rounded-lg sm:w-64 [&::-webkit-media-controls-panel]:bg-cream"
-        />
+        <div className="flex items-center gap-2 px-1 pb-1">
+          <audio
+            ref={audioRef}
+            src={src}
+            preload="metadata"
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => {
+              setPlaying(false);
+              setCur(0);
+              if (activeAudio === audioRef.current) activeAudio = null;
+            }}
+            onTimeUpdate={(e) => setCur(e.currentTarget.currentTime)}
+            onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)}
+          />
+          <button
+            onClick={toggle}
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors cursor-pointer",
+              playing
+                ? "bg-flag-red text-cream hover:bg-[#a80d1e]"
+                : "bg-ink text-cream hover:bg-ink-2",
+            )}
+            title={playing ? "Stop" : "Play"}
+            aria-label={playing ? "Stop voice message" : "Play voice message"}
+          >
+            {playing ? (
+              <Square size={11} className="fill-current" />
+            ) : (
+              <Play size={12} className="ml-0.5 fill-current" />
+            )}
+          </button>
+          <div className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ink/10">
+            <div className="absolute inset-y-0 left-0 rounded-full bg-flag-red" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="shrink-0 text-[10px] font-bold tabular-nums text-fg/55">{fmtTime(cur)}</span>
+        </div>
       ) : loading ? (
         <button
           disabled
@@ -1443,7 +1537,7 @@ function VoiceMessage({
       )}
     </div>
   );
-}
+});
 
 function ChatMessage({
   m,
