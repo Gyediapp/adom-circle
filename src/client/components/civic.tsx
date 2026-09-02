@@ -10,12 +10,15 @@ import {
   Loader2,
   Megaphone,
   ThumbsUp,
+  Share2,
+  Sparkles,
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { Button, Card, Chip, SectionHeading } from "./ui";
 import { LogoMark, Star } from "@/client/lib/logo";
-import { cn, timeAgo } from "@/client/lib/format";
+import { cn, timeAgo, initials, avatarColor } from "@/client/lib/format";
+import { ShareModal, type ShareTarget } from "./share-modal";
 
 const FACTS = [
   {
@@ -90,6 +93,14 @@ export function Civic() {
     }),
   );
 
+  // Share dialog for individual voices on the wall
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+
+  // Wall social proof — totals computed from the approved list
+  const wallVoices = suggestionsList.length;
+  const wallUpvotes = suggestionsList.reduce((sum, s) => sum + s.upvotes.length, 0);
+  const wallFeatured = suggestionsList.filter((s) => s.featured).length;
+
   return (
     <div>
       {/* Hero */}
@@ -148,23 +159,72 @@ export function Civic() {
 
       {/* Voice for Ghana — the wall (prominent, right under the hero) */}
       <section id="voice" className="mx-auto max-w-7xl scroll-mt-28 px-4 py-20 sm:px-6">
-        <SectionHeading
-          eyebrow="Your voice, carried forward"
-          title={<>Voice for <span className="text-flag-green">Ghana</span></>}
-          sub="One sentence. What would you ask our MPs and representatives to put forward, leaving no one behind? Approved suggestions are featured and shared."
-        />
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <SectionHeading
+            eyebrow="The people's wall"
+            title={<>Voice for <span className="text-flag-green">Ghana</span></>}
+            sub="One sentence. What would you ask our MPs and representatives to put forward, leaving no one behind? Approved voices are featured and shared."
+          />
+          {/* Social proof */}
+          <div className="flex gap-3">
+            <div className="flex items-center gap-2.5 rounded-2xl border border-fg/10 bg-card px-4 py-2.5 shadow-sm">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-flag-red/10 text-flag-red">
+                <Megaphone size={15} />
+              </span>
+              <div className="leading-tight">
+                <p className="font-display text-lg font-bold leading-none">{wallVoices}</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-fg/45">Voices</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 rounded-2xl border border-fg/10 bg-card px-4 py-2.5 shadow-sm">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-flag-green/10 text-flag-green">
+                <ThumbsUp size={15} />
+              </span>
+              <div className="leading-tight">
+                <p className="font-display text-lg font-bold leading-none">{wallUpvotes}</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-fg/45">Upvotes</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 rounded-2xl border border-fg/10 bg-card px-4 py-2.5 shadow-sm">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-flag-gold/20 text-gold-deep">
+                <Star size={15} />
+              </span>
+              <div className="leading-tight">
+                <p className="font-display text-lg font-bold leading-none">{wallFeatured}</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-fg/45">Featured</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="mt-10 grid gap-8 lg:grid-cols-[360px_1fr]">
           {/* Submit box */}
-          <Card className="h-fit p-6">
-            <p className="mb-3 text-sm font-bold">Submit a suggestion</p>
+          <Card className="h-fit overflow-hidden p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-b from-flag-red to-[#a80d1e] text-cream shadow-lg shadow-flag-red/25">
+                <Megaphone size={18} />
+              </span>
+              <div>
+                <p className="font-display text-lg font-bold leading-tight">Send your voice</p>
+                <p className="text-[11px] font-semibold text-fg/45">One sentence · under 280 characters</p>
+              </div>
+            </div>
             <textarea
               value={suggestionText}
               onChange={(e) => setSuggestionText(e.target.value)}
               placeholder="e.g. Invest in boreholes for rural schools so no child walks 4km for water."
               rows={4}
+              maxLength={280}
               className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-green focus:ring-2 focus:ring-flag-green/15"
             />
+            <div className="mt-1.5 flex items-center justify-between text-[11px] font-semibold text-fg/40">
+              <span className="flex items-center gap-1">
+                <Sparkles size={11} className="text-flag-gold" /> Reviewed by moderators
+              </span>
+              <span className={cn(suggestionText.trim().length > 260 && "text-flag-red")}>
+                {suggestionText.trim().length}/280
+              </span>
+            </div>
             <Button
               variant="dark"
               className="mt-3 w-full"
@@ -177,49 +237,83 @@ export function Civic() {
               {submitSuggestion.isPending ? <Loader2 size={16} className="animate-spin" /> : <Megaphone size={16} />}
               Send to the wall
             </Button>
-            <p className="mt-2 text-center text-[11px] text-fg/45">One per day · reviewed before publishing</p>
+            <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[11px] text-fg/45">
+              <ShieldCheck size={12} className="text-flag-green" /> One per day · approved before it appears
+            </p>
           </Card>
 
           {/* The wall */}
           <div className="space-y-4">
             {suggestionsList.length === 0 && (
-              <Card className="p-10 text-center text-sm text-fg/45">
-                No approved suggestions yet — be the first voice. 🇬🇭
+              <Card className="flex flex-col items-center justify-center p-12 text-center">
+                <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-flag-gold/15 text-gold-deep">
+                  <Megaphone size={28} />
+                </span>
+                <p className="font-display text-xl font-bold">The wall is waiting for its first voice</p>
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg/55">
+                  Send one sentence on what Ghana's representatives should put forward —
+                  it goes up here once approved.
+                </p>
               </Card>
             )}
-            {suggestionsList.map((s) => {
+            {suggestionsList.map((s, i) => {
               const upvoted = currentUser ? s.upvotes.includes(currentUser.id) : false;
+              const isTop = i === 0 && s.upvotes.length > 0;
               return (
-                <Card key={s.id} hover className="p-5">
-                  <div className="flex items-start gap-4">
+                <Card key={s.id} hover className="group relative overflow-hidden p-5">
+                  {s.featured && (
+                    <span className="flag-stripes absolute inset-x-0 top-0 h-[3px]" aria-hidden />
+                  )}
+                  <div className="flex items-start gap-3 sm:gap-4">
                     <button
                       onClick={() => {
                         if (!currentUser) return toast("Join the circle to upvote", "error");
                         upvoteSuggestion.mutate({ memberId: currentUser.id, suggestionId: s.id });
                       }}
                       className={cn(
-                        "flex flex-col items-center rounded-2xl border px-3 py-2 transition-colors cursor-pointer",
+                        "flex flex-col items-center rounded-2xl border px-3 py-2 transition-all duration-200 cursor-pointer active:scale-90",
                         upvoted
-                          ? "border-flag-green bg-flag-green/10 text-flag-green"
-                          : "border-fg/15 text-fg/50 hover:border-flag-green hover:text-flag-green",
+                          ? "border-flag-green bg-flag-green/10 text-flag-green shadow-sm"
+                          : "border-fg/15 text-fg/50 hover:border-flag-green hover:text-flag-green hover:shadow-sm",
                       )}
-                      title="Upvote"
+                      title={upvoted ? "Remove your upvote" : "Upvote — this voice rises"}
                     >
-                      <ThumbsUp size={16} />
+                      <ThumbsUp size={16} className={cn(upvoted && "fill-current")} />
                       <span className="text-sm font-bold">{s.upvotes.length}</span>
                     </button>
                     <div className="min-w-0 flex-1">
                       <p className="text-[15px] leading-relaxed text-fg/85">“{s.text}”</p>
-                      <p className="mt-2 flex items-center gap-2 text-[12px] text-fg/45">
-                        {s.featured && (
+                      <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[12px] text-fg/45">
+                        {isTop && (
+                          <Chip tone="gold" className="px-2 py-0.5 text-[10px]">
+                            <Star size={10} className="fill-current" /> Top voice
+                          </Chip>
+                        )}
+                        {s.featured && !isTop && (
                           <Chip tone="gold" className="px-2 py-0.5 text-[10px]">
                             <Star size={10} /> Featured
                           </Chip>
                         )}
-                        <span className="font-semibold">{s.authorName}</span>
+                        <span
+                          className="flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-bold text-cream"
+                          style={{ background: avatarColor(s.authorName) }}
+                        >
+                          {initials(s.authorName)}
+                        </span>
+                        <span className="font-semibold text-fg/60">{s.authorName}</span>
                         <span>· {timeAgo(s.createdAt)}</span>
-                      </p>
+                      </div>
                     </div>
+                    <button
+                      onClick={() =>
+                        setShareTarget({ text: s.text, authorName: s.authorName, url: "/civic#voice" })
+                      }
+                      className="rounded-full p-2 text-fg/30 opacity-0 transition-all group-hover:opacity-100 hover:bg-flag-green/10 hover:text-flag-green pointer-coarse:opacity-100 cursor-pointer"
+                      title="Share this voice"
+                      aria-label="Share this voice"
+                    >
+                      <Share2 size={16} />
+                    </button>
                   </div>
                 </Card>
               );
@@ -316,6 +410,8 @@ export function Civic() {
           </p>
         </div>
       </section>
+
+      <ShareModal open={!!shareTarget} onClose={() => setShareTarget(null)} target={shareTarget} />
     </div>
   );
 }

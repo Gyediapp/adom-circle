@@ -11,6 +11,9 @@ export type ShareTarget = {
   text: string;
   authorName?: string;
   roomName?: string;
+  // Where the shared link should land (e.g. "/civic#voice"). Defaults to the
+  // community page for chat shares.
+  url?: string;
 };
 
 // Share dialog with real social buttons + copy link.
@@ -31,7 +34,7 @@ export function ShareModal({
   const [copied, setCopied] = useState(false);
   if (!open || !target) return null;
 
-  const shareUrl = `${SITE_URL}/community`;
+  const shareUrl = target.url ? `${SITE_URL}${target.url}` : `${SITE_URL}/community`;
   const caption = target.text
     ? `"${target.text.length > 120 ? target.text.slice(0, 120) + "…" : target.text}"${
         target.authorName ? ` — ${target.authorName}` : ""
