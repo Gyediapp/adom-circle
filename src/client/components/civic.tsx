@@ -146,81 +146,8 @@ export function Civic() {
         </div>
       </section>
 
-      {/* Facts */}
-      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
-        <SectionHeading
-          eyebrow="Learn"
-          title={<>Four things every <span className="text-flag-red">citizen</span> should know.</>}
-          className="mb-12"
-        />
-        <div className="grid gap-5 md:grid-cols-2">
-          {FACTS.map((f) => (
-            <Card key={f.title} hover className="p-6">
-              <div className="mb-3 inline-flex rounded-2xl bg-ink p-3 text-flag-gold">
-                <f.icon size={20} />
-              </div>
-              <p className="font-display text-lg font-bold">{f.title}</p>
-              <p className="mt-2 text-sm leading-relaxed text-fg/60">{f.body}</p>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* Timeline */}
-      <section className="bg-soft py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
-            <div>
-              <SectionHeading
-                eyebrow="Key dates"
-                title={<>Election timeline <span className="text-flag-green">at a glance.</span></>}
-                sub="Registration, campaigns, voting — know the dates, plan your participation."
-              />
-              <div className="mt-8 space-y-4">
-                {TIMELINE.map((t, i) => (
-                  <div key={t.title} className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink text-flag-gold font-display font-bold">
-                        {i + 1}
-                      </div>
-                      {i < TIMELINE.length - 1 && <div className="w-px flex-1 bg-ink/15" />}
-                    </div>
-                    <div className="pb-6">
-                      <p className="flex items-center gap-2 font-bold">
-                        <CalendarDays size={15} className="text-flag-red" /> {t.title}
-                        <Chip tone="green">{t.date}</Chip>
-                      </p>
-                      <p className="mt-1 text-sm text-fg/60">{t.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <Card className="overflow-hidden">
-              <div className="relative h-64">
-                <img src="/output/images/hero.jpg" alt="Ghana" className="h-full w-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-ink/70 to-transparent" />
-                <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-full bg-page px-4 py-2 text-sm font-bold text-fg">
-                  <Megaphone size={15} className="text-flag-red" /> Non-partisan. Always.
-                </div>
-              </div>
-              <div className="p-6">
-                <p className="text-sm leading-relaxed text-fg/70">
-                  Adom Circle never endorses candidates or parties. We advocate for the
-                  Constitution, for participation, and for leaders who uphold values —
-                  so you can vote your conscience, in peace.
-                </p>
-                <div className="mt-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-flag-green">
-                  <ShieldCheck size={14} /> Community guidelines: no hate speech · no incitement · respect for all faiths
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Voice for Ghana — suggestions for representatives */}
-      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+      {/* Voice for Ghana — the wall (prominent, right under the hero) */}
+      <section id="voice" className="mx-auto max-w-7xl scroll-mt-28 px-4 py-20 sm:px-6">
         <SectionHeading
           eyebrow="Your voice, carried forward"
           title={<>Voice for <span className="text-flag-green">Ghana</span></>}
@@ -297,6 +224,79 @@ export function Civic() {
                 </Card>
               );
             })}
+          </div>
+        </div>
+      </section>
+
+      {/* Facts */}
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+        <SectionHeading
+          eyebrow="Learn"
+          title={<>Four things every <span className="text-flag-red">citizen</span> should know.</>}
+          className="mb-12"
+        />
+        <div className="grid gap-5 md:grid-cols-2">
+          {FACTS.map((f) => (
+            <Card key={f.title} hover className="p-6">
+              <div className="mb-3 inline-flex rounded-2xl bg-ink p-3 text-flag-gold">
+                <f.icon size={20} />
+              </div>
+              <p className="font-display text-lg font-bold">{f.title}</p>
+              <p className="mt-2 text-sm leading-relaxed text-fg/60">{f.body}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Timeline */}
+      <section className="bg-soft py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
+            <div>
+              <SectionHeading
+                eyebrow="Key dates"
+                title={<>Election timeline <span className="text-flag-green">at a glance.</span></>}
+                sub="Registration, campaigns, voting — know the dates, plan your participation."
+              />
+              <div className="mt-8 space-y-4">
+                {TIMELINE.map((t, i) => (
+                  <div key={t.title} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink text-flag-gold font-display font-bold">
+                        {i + 1}
+                      </div>
+                      {i < TIMELINE.length - 1 && <div className="w-px flex-1 bg-ink/15" />}
+                    </div>
+                    <div className="pb-6">
+                      <p className="flex items-center gap-2 font-bold">
+                        <CalendarDays size={15} className="text-flag-red" /> {t.title}
+                        <Chip tone="green">{t.date}</Chip>
+                      </p>
+                      <p className="mt-1 text-sm text-fg/60">{t.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <Card className="overflow-hidden">
+              <div className="relative h-64">
+                <img src="/output/images/hero.jpg" alt="Ghana" className="h-full w-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-ink/70 to-transparent" />
+                <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-full bg-page px-4 py-2 text-sm font-bold text-fg">
+                  <Megaphone size={15} className="text-flag-red" /> Non-partisan. Always.
+                </div>
+              </div>
+              <div className="p-6">
+                <p className="text-sm leading-relaxed text-fg/70">
+                  Adom Circle never endorses candidates or parties. We advocate for the
+                  Constitution, for participation, and for leaders who uphold values —
+                  so you can vote your conscience, in peace.
+                </p>
+                <div className="mt-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-flag-green">
+                  <ShieldCheck size={14} /> Community guidelines: no hate speech · no incitement · respect for all faiths
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
       </section>

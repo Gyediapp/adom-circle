@@ -712,11 +712,12 @@ export const community = {
       // Notify the thread author about the reply
       const thread = await threadKV.getItem(input.threadId);
       if (thread && thread.authorId !== member.id) {
+        const room = await roomKV.getItem(thread.roomId);
         await notify(
           thread.authorId,
           "reply",
           `${member.name} replied to your discussion`,
-          `Re: ${thread.title}`,
+          `${room ? `In #${room.name} · ` : ""}Re: ${thread.title}`,
         ).catch(() => {});
       }
       return reply;
@@ -738,11 +739,12 @@ export const community = {
       if (!liked && thread.authorId !== input.memberId) {
         const { memberKV: mk } = await import("./members");
         const liker = await mk.getItem(input.memberId);
+        const room = await roomKV.getItem(thread.roomId);
         await notify(
           thread.authorId,
           "like",
           `${liker?.name ?? "Someone"} liked your discussion`,
-          thread.title,
+          `${room ? `In #${room.name} · ` : ""}${thread.title}`,
         ).catch(() => {});
       }
       return updated;

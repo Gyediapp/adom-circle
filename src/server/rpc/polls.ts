@@ -122,12 +122,14 @@ export const polls = {
     .handler(async ({ input }) => {
       const { requireMember: reqMember } = await import("./members");
       const closer = await reqMember(input.memberId);
-      if (closer.role !== "admin" && closer.role !== "moderator") {
-        throw new Error("Only moderators and admins can close polls.");
-      }
       const raw = await pollKV.getItem(input.pollId);
       if (!raw) throw new Error("Poll not found");
-      const updated = { ...normalizePoll(raw), open: false };
+      const poll = normalizePoll(raw);
+      const isCreator = poll.createdBy === closer.id;
+      if (closer.role !== "admin" && closer.role !== "moderator" && !isCreator) {
+        throw new Error("Only the poll creator, moderators and admins can close polls.");
+      }
+      const updated = { ...poll, open: false };
       await pollKV.setItem(updated.id, updated);
       return { ...updated, ...pollResults(updated) };
     }),

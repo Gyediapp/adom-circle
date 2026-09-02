@@ -91,6 +91,9 @@ export function Home({
   const { data: settings } = useQuery(queryClient.site.get.queryOptions());
   const { data: projects } = useQuery(queryClient.projects.getProjects.queryOptions());
   const { data: posts } = useQuery(queryClient.posts.list.queryOptions());
+  const { data: wallSuggestions = [] } = useQuery(
+    queryClient.suggestions.list.queryOptions(),
+  );
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
   const { data: ads } = useQuery(queryClient.events.adsPublic.queryOptions());
   const { data: events } = useQuery(queryClient.events.list.queryOptions());
@@ -167,6 +170,14 @@ export function Home({
   const go = (t: Tab) => {
     onTab(t);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Navigate to the Civic page and scroll straight to the Voice for Ghana wall.
+  const goVoiceWall = () => {
+    onTab("civic");
+    window.setTimeout(() => {
+      document.getElementById("voice")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
   };
 
   return (
@@ -669,6 +680,55 @@ export function Home({
             </div>
           </div>
         </div>
+      </section>
+
+      {/* ================= VOICE FOR GHANA — THE WALL ================= */}
+      <section id="voice-home" className="mx-auto max-w-7xl scroll-mt-28 px-4 py-24 sm:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <SectionHeading
+            eyebrow="Voice for Ghana"
+            title={<>The wall to <span className="text-flag-red">Parliament</span></>}
+            sub="One sentence. What would you ask our MPs and representatives to put forward, leaving no one behind? The best voices are featured and shared."
+          />
+          <Button variant="outline" className="shrink-0" onClick={goVoiceWall}>
+            <Megaphone size={15} /> Add your voice <ArrowRight size={15} />
+          </Button>
+        </div>
+
+        {wallSuggestions.length === 0 ? (
+          <Card className="mt-10 p-12 text-center">
+            <Megaphone size={28} className="mx-auto mb-3 text-flag-red" />
+            <p className="font-display text-2xl font-bold">Be the first voice on the wall</p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-fg/55">
+              One sentence on what Ghana's representatives should put forward — schools, water, roads,
+              jobs, healthcare. It takes 30 seconds to join and send yours.
+            </p>
+            <Button variant="dark" className="mt-6" onClick={goVoiceWall}>
+              Send your suggestion <ArrowRight size={15} />
+            </Button>
+          </Card>
+        ) : (
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            {wallSuggestions.slice(0, 3).map((s, i) => (
+              <Card key={s.id} hover className="flex flex-col p-6">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  {i === 0 ? (
+                    <Chip tone="gold"><Star size={10} className="fill-current" /> Top voice</Chip>
+                  ) : (
+                    <Chip tone="green">On the wall</Chip>
+                  )}
+                  <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-fg/50">
+                    <ThumbsUp size={13} /> {s.upvotes.length}
+                  </span>
+                </div>
+                <p className="flex-1 text-[15px] leading-relaxed text-fg/85">“{s.text}”</p>
+                <p className="mt-4 border-t border-fg/8 pt-3 text-[12px] font-semibold text-fg/45">
+                  {s.authorName} · {timeAgo(s.createdAt)}
+                </p>
+              </Card>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ================= COMMUNITY TEASER ================= */}

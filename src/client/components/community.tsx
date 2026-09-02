@@ -36,7 +36,7 @@ import type { PublicMember } from "@/server/rpc/members";
 import { DmModal } from "./dm-modal";
 import { ShareModal, type ShareTarget } from "./share-modal";
 import { MemberModal } from "./member-modal";
-import { BarChart3, Kanban, SmilePlus } from "lucide-react";
+import { BarChart3, Kanban, SmilePlus, ChevronDown, ChevronUp } from "lucide-react";
 
 type ChatMsg = Message & { authorPoints: number; authorRole: string; hasAudio: boolean };
 
@@ -392,6 +392,10 @@ export function Community() {
     }),
   );
   const [pollOpen, setPollOpen] = useState(false);
+  // Fold the poll cards away to a slim indicator so chat stays readable.
+  const [pollsCollapsed, setPollsCollapsed] = useState(false);
+  const activePolls = (polls ?? []).filter((p) => p.open);
+  const pollPreview = (polls ?? []).find((p) => p.open)?.question ?? (polls ?? [])[0]?.question ?? "";
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [myVote, setMyVote] = useState<Record<string, number>>({});
@@ -650,15 +654,35 @@ export function Community() {
               <div className="flex items-center justify-between">
                 <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-fg/50">
                   <BarChart3 size={13} className="text-flag-red" /> Community polls
+                  {activePolls.length > 0 && (
+                    <span className="rounded-full bg-flag-red/10 px-2 py-0.5 text-[10px] font-bold normal-case tracking-normal text-flag-red">
+                      {activePolls.length} active
+                    </span>
+                  )}
                 </p>
-                {me && (
-                  <button
-                    onClick={() => setPollOpen(!pollOpen)}
-                    className="rounded-full border border-fg/15 px-3 py-1 text-[11px] font-bold text-fg/60 hover:border-flag-red hover:text-flag-red transition-colors cursor-pointer"
-                  >
-                    {pollOpen ? "Close" : "+ New poll"}
-                  </button>
-                )}
+                <div className="flex items-center gap-1">
+                  {(polls?.length ?? 0) > 0 && (
+                    <button
+                      onClick={() => setPollsCollapsed(!pollsCollapsed)}
+                      className="rounded-full border border-fg/15 px-3 py-1 text-[11px] font-bold text-fg/60 hover:border-flag-red hover:text-flag-red transition-colors cursor-pointer"
+                      title={pollsCollapsed ? "Show polls" : "Fold polls away"}
+                    >
+                      {pollsCollapsed ? (
+                        <span className="inline-flex items-center gap-1"><ChevronDown size={12} /> Show polls</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1"><ChevronUp size={12} /> Fold</span>
+                      )}
+                    </button>
+                  )}
+                  {me && (
+                    <button
+                      onClick={() => setPollOpen(!pollOpen)}
+                      className="rounded-full border border-fg/15 px-3 py-1 text-[11px] font-bold text-fg/60 hover:border-flag-red hover:text-flag-red transition-colors cursor-pointer"
+                    >
+                      {pollOpen ? "Close" : "+ New poll"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {pollOpen && (
@@ -719,7 +743,27 @@ export function Community() {
                 </Card>
               )}
 
-              {(polls ?? []).slice(0, 3).map((p) => {
+              {pollsCollapsed && (polls?.length ?? 0) > 0 && (
+                <button
+                  onClick={() => setPollsCollapsed(false)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-flag-gold/50 bg-flag-gold/10 px-4 py-3 text-left transition-colors hover:bg-flag-gold/20 cursor-pointer"
+                >
+                  <BarChart3 size={16} className="shrink-0 text-flag-red" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-bold">
+                      {activePolls.length > 0
+                        ? `${activePolls.length} active poll${activePolls.length === 1 ? "" : "s"}`
+                        : "Closed polls"}
+                    </span>
+                    {pollPreview && (
+                      <span className="block truncate text-[13px] font-semibold text-fg/70">“{pollPreview}”</span>
+                    )}
+                  </span>
+                  <ChevronDown size={16} className="shrink-0 text-fg/50" />
+                </button>
+              )}
+
+              {!pollsCollapsed && (polls ?? []).slice(0, 3).map((p) => {
                 const total = p.total ?? 0;
                 const myChoice = myVote[p.id] ?? undefined;
                 return (
@@ -760,7 +804,7 @@ export function Community() {
                     <p className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-fg/40">
                       {total} {total === 1 ? "vote" : "votes"}
                       {!p.open && " · closed"}
-                      {me && (me.role === "admin" || me.role === "moderator") && p.open && (
+                      {me && p.open && (me.role === "admin" || me.role === "moderator" || p.createdBy === me.id) && (
                         <button
                           onClick={() =>
                             me &&
