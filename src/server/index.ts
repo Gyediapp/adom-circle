@@ -125,6 +125,7 @@ app.get("/sitemap.xml", (c) => {
   const pages = [
     { loc: "/", freq: "daily", prio: "1.0" },
     { loc: "/community", freq: "daily", prio: "0.9" },
+    { loc: "/blog", freq: "weekly", prio: "0.8" },
     { loc: "/projects", freq: "weekly", prio: "0.8" },
     { loc: "/events", freq: "weekly", prio: "0.8" },
     { loc: "/civic", freq: "weekly", prio: "0.7" },
