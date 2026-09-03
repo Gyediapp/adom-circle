@@ -36,7 +36,7 @@ import type { PublicMember } from "@/server/rpc/members";
 import { DmModal } from "./dm-modal";
 import { ShareModal, type ShareTarget } from "./share-modal";
 import { MemberModal } from "./member-modal";
-import { BarChart3, Kanban, SmilePlus, ChevronDown, ChevronUp } from "lucide-react";
+import { BarChart3, Kanban, SmilePlus, ChevronDown, ChevronUp, Volume2, VolumeX } from "lucide-react";
 
 type ChatMsg = Message & { authorPoints: number; authorRole: string; hasAudio: boolean };
 
@@ -93,6 +93,20 @@ export function Community() {
   const [anonymous, setAnonymous] = useState(false);
   // Audio-only mode toggle (General)
   const [audioOnly, setAudioOnly] = useState(false);
+  // Master audio on/off — turns the whole voice feature (record + playback)
+  // off or on. Remembered per-device across visits.
+  const [audioEnabled, setAudioEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem("adom_audio_enabled");
+    return saved === null ? true : saved === "1";
+  });
+  useEffect(() => {
+    localStorage.setItem("adom_audio_enabled", audioEnabled ? "1" : "0");
+    if (!audioEnabled) {
+      setAudioData(null);
+      if (recording) stopRecording();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioEnabled]);
   // @mentions
   const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -607,13 +621,29 @@ export function Community() {
             Respectful discussion, real connection. React, reply and message — the Constitution above all, no hate speech, everyone welcome.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant={view === "chat" ? "dark" : "outline"} onClick={() => selectView("chat")}>
-            <MessageSquare size={16} /> Chatrooms
-          </Button>
-          <Button variant={view === "forum" ? "dark" : "outline"} onClick={() => selectView("forum")}>
-            <MessagesSquare size={16} /> Forum
-          </Button>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <div className="flex gap-2">
+            <Button variant={view === "chat" ? "dark" : "outline"} onClick={() => selectView("chat")}>
+              <MessageSquare size={16} /> Chatrooms
+            </Button>
+            <Button variant={view === "forum" ? "dark" : "outline"} onClick={() => selectView("forum")}>
+              <MessagesSquare size={16} /> Forum
+            </Button>
+          </div>
+          {/* Master audio on/off — hides the mic + playback for the whole community */}
+          <button
+            onClick={() => setAudioEnabled(!audioEnabled)}
+            className={cn(
+              "flex items-center gap-1.5 self-start rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors cursor-pointer",
+              audioEnabled
+                ? "border-flag-green/40 bg-flag-green/10 text-flag-green hover:bg-flag-green/20"
+                : "border-fg/15 bg-soft text-fg/45 hover:text-flag-red hover:border-flag-red/50",
+            )}
+            title={audioEnabled ? "Turn voice messages off (mic + playback)" : "Turn voice messages on (mic + playback)"}
+          >
+            {audioEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+            {audioEnabled ? "Voice on" : "Voice off"}
+          </button>
         </div>
       </div>
 
@@ -995,6 +1025,7 @@ export function Community() {
                             (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
                         }
                         verified={Boolean(authorInfo?.verified)}
+                        audioEnabled={audioEnabled}
                         onReact={(type) => me && react.mutate({ memberId: me.id, messageId: m.id, type })}
                         onReply={() => {
                           if (!me) return toast("Sign in to reply", "error");
@@ -1053,6 +1084,7 @@ export function Community() {
                                     (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
                                 }
                                 verified={Boolean(rInfo?.verified)}
+                                audioEnabled={audioEnabled}
                                 onReact={(type) => me && react.mutate({ memberId: me.id, messageId: r.id, type })}
                                 onReply={() => {
                                   if (!me) return toast("Sign in to reply", "error");
@@ -1174,7 +1206,7 @@ export function Community() {
                       </div>
                     )}
                   </div>
-                  {supportsAudio && !audioData && !recording && (
+                  {audioEnabled && supportsAudio && !audioData && !recording && (
                     <button
                       onClick={startRecording}
                       className="rounded-full p-2.5 text-fg/45 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
@@ -1608,6 +1640,7 @@ function ChatMessage({
   onRetry,
   verified,
   onProfile,
+  audioEnabled,
 }: {
   m: ChatMsg;
   me: PublicMember | null;
@@ -1633,6 +1666,7 @@ function ChatMessage({
   onRetry?: () => void;
   verified?: boolean;
   onProfile: () => void;
+  audioEnabled: boolean;
 }) {
   const mine = m.authorId === me?.id;
   const reactions = m.reactions ?? {};
@@ -1716,8 +1750,13 @@ function ChatMessage({
                 (m.pending || m.failed) && "opacity-70",
               )}
             >
-              {(m.audio || m.hasAudio) && (
+              {(audioEnabled && (m.audio || m.hasAudio)) && (
                 <VoiceMessage messageId={m.id} hasAudio={Boolean(m.hasAudio)} audio={m.audio} mine={mine} />
+              )}
+              {!audioEnabled && (m.audio || m.hasAudio) && (
+                <span className="mb-1.5 inline-flex items-center gap-1.5 rounded-xl bg-soft px-3 py-1.5 text-[11px] font-semibold text-fg/45">
+                  <VolumeX size={11} /> Voice message (audio off)
+                </span>
               )}
               {m.text && <MentionText text={m.text} mentions={m.mentions ?? []} />}
               {m.pending && (
