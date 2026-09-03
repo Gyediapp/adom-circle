@@ -28,6 +28,9 @@ import {
   ShieldCheck,
   BadgeCheck,
   Check,
+  Database,
+  HardDrive,
+  RefreshCw,
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
@@ -133,6 +136,26 @@ function Overview() {
     }),
   );
 
+  // Storage backend + Supabase → volume migration
+  const qc = useQueryClient();
+  const [migrateOpen, setMigrateOpen] = useState(false);
+  const { data: storage } = useQuery(
+    queryClient.admin.storageStatus.queryOptions({
+      input: { adminId: user?.id ?? "" },
+      enabled: !!user,
+    }),
+  );
+  const migrate = useMutation(
+    queryClient.admin.migrateStorageToFile.mutationOptions({
+      onSuccess: (r) => {
+        toast(`Migration complete — ${r.total} items moved to the Railway volume ✅`);
+        setMigrateOpen(false);
+        qc.invalidateQueries({ queryKey: ["admin", "storageStatus"] });
+      },
+      onError: (e: any) => toast(e?.message ?? "Migration failed", "error"),
+    }),
+  );
+
   if (!data) {
     return (
       <Card className="p-16 text-center text-sm text-fg/45">
@@ -220,6 +243,99 @@ function Overview() {
           </p>
         </div>
       </Card>
+
+      {/* Storage & data — backend status + Supabase → volume migration */}
+      <Card className="p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-bold">Storage & data</p>
+          <Chip tone={storage?.backend === "file" ? "green" : "sand"}>
+            {storage?.backend === "file" ? (
+              <>
+                <HardDrive size={11} /> Railway volume (file)
+              </>
+            ) : (
+              <>
+                <Database size={11} /> Supabase (cloud)
+              </>
+            )}
+          </Chip>
+        </div>
+
+        {storage?.backend === "file" ? (
+          <div className="rounded-2xl bg-flag-green/10 px-4 py-3">
+            <p className="flex items-center gap-1.5 text-[13px] font-bold text-flag-green">
+              <CheckCircle2 size={14} /> Running on the Railway volume
+            </p>
+            <p className="mt-0.5 text-[11px] text-fg/55">
+              Data lives in {storage.storagePath} — no Supabase egress. Supabase env vars are removed.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-dashed border-clay/50 bg-gold-soft/25 px-4 py-3">
+              <p className="flex items-center gap-1.5 text-[13px] font-bold text-clay">
+                <Database size={14} /> Stored in Supabase cloud
+              </p>
+              <p className="mt-0.5 text-[11px] text-fg/55">
+                {storage?.collections.reduce((s, c) => s + c.count, 0) ?? 0} items across{" "}
+                {storage?.collections.length ?? 0} collections. Supabase free-tier egress counts against you.
+              </p>
+            </div>
+            <Button variant="dark" className="px-4 py-2 text-xs" onClick={() => setMigrateOpen(true)}>
+              <HardDrive size={14} /> Start migration to volume
+            </Button>
+          </div>
+        )}
+
+        {storage?.collections && storage.collections.length > 0 && (
+          <div className="mt-3 grid max-h-40 grid-cols-3 gap-x-4 gap-y-1 overflow-y-auto pr-1 sm:grid-cols-4">
+            {storage.collections.map((c) => (
+              <p key={c.name} className="flex items-baseline justify-between gap-2 text-[11px]">
+                <span className="truncate font-semibold text-fg/55">{c.name}</span>
+                <span className="font-bold text-fg/75">{c.count}</span>
+              </p>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Migration confirm modal */}
+      <Modal open={migrateOpen} onClose={() => setMigrateOpen(false)}>
+        <div className="p-6 sm:p-8">
+          <p className="mb-1 flex items-center gap-2 font-display text-xl font-bold">
+            <HardDrive size={18} className="text-flag-green" /> Migrate to the Railway volume
+          </p>
+          <div className="mt-4 space-y-3 text-sm leading-relaxed text-fg/70">
+            <p>
+              Copies <strong>every collection</strong> from Supabase into the volume mounted at{" "}
+              <code className="rounded bg-soft px-1.5 py-0.5 text-[12px] font-bold">/app/.storage</code>.
+            </p>
+            <p className="rounded-2xl bg-soft/60 px-4 py-3 text-[13px]">
+              <strong className="text-flag-green">Safe:</strong> this only <em>reads</em> Supabase — nothing is
+              deleted. Your Supabase project stays intact as a backup.
+            </p>
+            <p className="rounded-2xl bg-soft/60 px-4 py-3 text-[13px]">
+              <strong>After it finishes:</strong> remove <code className="rounded bg-ink/10 px-1 font-bold">SUPABASE_URL</code> and{" "}
+              <code className="rounded bg-ink/10 px-1 font-bold">SUPABASE_SERVICE_ROLE_KEY</code> from Railway, then redeploy. The site
+              then runs entirely on the volume — zero egress cost.
+            </p>
+          </div>
+          <div className="mt-6 flex gap-2">
+            <Button
+              variant="dark"
+              className="flex-1"
+              disabled={migrate.isPending}
+              onClick={() => user && migrate.mutate({ adminId: user.id })}
+            >
+              {migrate.isPending ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={15} />}
+              {migrate.isPending ? "Migrating…" : "Start migration"}
+            </Button>
+            <Button variant="ghost" onClick={() => setMigrateOpen(false)} disabled={migrate.isPending}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Broadcast */}
       <Card className="p-5">

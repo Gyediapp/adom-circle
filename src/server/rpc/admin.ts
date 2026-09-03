@@ -11,6 +11,38 @@ import {
   threadKV,
 } from "./community";
 import { contributionKV, projectKV } from "./projects";
+import {
+  createKV,
+  backendName,
+  createFileKVForced,
+  readSupabaseCollectionRaw,
+} from "../lib/create-kv";
+
+// Every storage collection in the app (each maps to a createKV(name) store).
+// Must stay in sync if new collections are added.
+const COLLECTIONS = [
+  "members",
+  "sessions",
+  "auth-attempts",
+  "rooms",
+  "messages",
+  "message-audio",
+  "threads",
+  "replies",
+  "reports",
+  "settings",
+  "posts",
+  "suggestions",
+  "projects",
+  "contributions",
+  "tasks",
+  "notifications",
+  "events",
+  "ads",
+  "emails",
+  "dm-convos",
+  "dm-messages",
+] as const;
 
 export const admin = {
   overview: os
@@ -96,4 +128,58 @@ export const admin = {
           .slice(0, 8),
       };
     }),
+
+  // Current storage backend + per-collection sizes (Admin → Overview)
+  storageStatus: os
+    .input(z.object({ adminId: z.string() }))
+    .handler(async ({ input }) => {
+      await requireAdmin(input.adminId);
+      const backend = backendName();
+      const collections: Array<{ name: string; count: number }> = [];
+      for (const name of COLLECTIONS) {
+        const items = await createKV(name).getAllItems();
+        collections.push({ name, count: items.length });
+      }
+      return {
+        backend,
+        storagePath: process.env.STORAGE_DIR ?? "./.storage",
+        collections,
+        canMigrate: backend === "supabase",
+      };
+    }),
+
+  // One-time migration: copy every collection from Supabase into the local
+  // file store (the Railway volume). Reads Supabase only — never deletes.
+  // After this succeeds, remove SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY and
+  // redeploy; the app then runs entirely on the volume with zero egress.
+  migrateStorageToFile: os
+    .input(z.object({ adminId: z.string() }))
+    .handler(async ({ input }) => {
+      await requireAdmin(input.adminId);
+      if (backendName() !== "supabase") {
+        throw new Error("The app is already on file storage — nothing to migrate.");
+      }
+      if (migrationRunning) {
+        throw new Error("A migration is already running — please wait.");
+      }
+      migrationRunning = true;
+      try {
+        const results: Record<string, number> = {};
+        let total = 0;
+        for (const name of COLLECTIONS) {
+          const rows = await readSupabaseCollectionRaw(name);
+          const dest = createFileKVForced(name);
+          for (const row of rows) {
+            await dest.setItem(row.key, row.value as never);
+          }
+          results[name] = rows.length;
+          total += rows.length;
+        }
+        return { backend: "file", collections: results, total };
+      } finally {
+        migrationRunning = false;
+      }
+    }),
 };
+
+let migrationRunning = false;

@@ -86,6 +86,33 @@ export interface KV<T extends StorageValue = StorageValue> {
   subscribe(): AsyncGenerator<{ event: WatchEvent; key: string }>;
 }
 
+// Which backend the app is currently using — surfaced in Admin → Overview.
+export function backendName(): "supabase" | "file" {
+  return usingSupabase() ? "supabase" : "file";
+}
+
+// Force the local file backend regardless of env. Used ONLY by the
+// Supabase → file-volume migration (admin.storage.migrateToFile) so the tool
+// can write into the volume while the app is still live on Supabase.
+export function createFileKVForced<T extends StorageValue>(name: string): KV<T> {
+  return createFileKV<T>(name);
+}
+
+// Read every row of one Supabase collection (1 query, no per-key round-trips).
+// Used by the migration tool to pull data out of Supabase efficiently.
+export async function readSupabaseCollectionRaw(
+  name: string,
+): Promise<Array<{ key: string; value: unknown }>> {
+  const { data, error } = await getSupabase()
+    .from("adom_storage")
+    .select("key, value")
+    .eq("collection", name);
+  if (error) {
+    throw new Error(`supabase read failed (${name}): ${error.message}`);
+  }
+  return (data ?? []).map((r) => ({ key: r.key as string, value: r.value }));
+}
+
 export function createKV<T extends StorageValue>(name: string): KV<T> {
   if (usingSupabase()) {
     startKeepAlive();
