@@ -52,6 +52,7 @@ export function Footer({
                 [
                   ["home", "Home"],
                   ["community", "Community & Forum"],
+                  ["blog", "Blog"],
                   ["projects", "Projects & Impact"],
                   ["events", "Events & Activities"],
                   ["civic", "Civic & Voting"],

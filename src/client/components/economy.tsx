@@ -59,7 +59,7 @@ export function Economy({ onTab }: { onTab: (t: Tab) => void }) {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-ink text-cream pt-32 pb-20">
+      <section className="relative overflow-hidden bg-ink text-cream pt-36 pb-20">
         <div className="absolute inset-0">
           <img src="/output/images/economy.jpg" alt="Ghanaian economy" className="h-full w-full object-cover opacity-25" />
           <div className="absolute inset-0 bg-gradient-to-b from-ink/70 via-ink/80 to-ink" />

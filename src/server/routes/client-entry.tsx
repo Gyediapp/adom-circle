@@ -18,6 +18,10 @@ const ROUTE_META: Record<string, { title: string; desc: string; noindex?: boolea
     title: "Community & Forum — Adom Circle",
     desc: "Join live chat rooms and forum discussions across Ghana — Youth & Education, Civic & Voting, Diaspora Corner and more.",
   },
+  blog: {
+    title: "Stories & Updates — Adom Circle Blog",
+    desc: "News, stories, civic education and economic insights from the Adom Circle community — at home and in the diaspora.",
+  },
   projects: {
     title: "Projects & Impact — Adom Circle",
     desc: "Giving back, measured. Volunteer projects across all 16 regions of Ghana — education, health, water, youth, environment and economy.",

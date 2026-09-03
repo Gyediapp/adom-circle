@@ -104,7 +104,7 @@ export function Civic() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-ink text-cream pt-32 pb-20">
+      <section className="relative overflow-hidden bg-ink text-cream pt-36 pb-20">
         <div className="absolute inset-0">
           <img src="/output/images/civic.jpg" alt="Civic engagement" className="h-full w-full object-cover opacity-25" />
           <div className="absolute inset-0 bg-gradient-to-b from-ink/70 via-ink/80 to-ink" />
@@ -134,7 +134,7 @@ export function Civic() {
                   only my commitment to participate in protecting our peace.”
                 </p>
                 {hasPledged ? (
-                  <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-flag-green/20 px-4 py-2 text-sm font-bold text-emerald-300">
+                  <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-flag-gold/40 bg-flag-gold/15 px-4 py-2 text-sm font-bold text-gold-soft">
                     <CheckCircle2 size={16} /> You've pledged to vote — thank you!
                   </p>
                 ) : (
