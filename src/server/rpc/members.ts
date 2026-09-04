@@ -19,6 +19,8 @@ export const MemberSchema = z.object({
   church: z.string(),
   profession: z.string(),
   bio: z.string(),
+  avatarImage: z.string().nullable().optional(),
+  coverImage: z.string().nullable().optional(),
   badges: z.array(z.string()),
   pledgeVote: z.boolean(),
   points: z.number(),
@@ -63,6 +65,8 @@ export function normalizeMember(m: Member): Member {
     verified: m.verified ?? false,
     merchantName: m.merchantName ?? "",
     lastSeenAt: m.lastSeenAt ?? null,
+    avatarImage: m.avatarImage ?? null,
+    coverImage: m.coverImage ?? null,
     privacy: m.privacy ?? {
       showRegion: true,
       showHometown: true,
@@ -675,6 +679,14 @@ export const members = {
           ((r.fromId === me.id && r.toId === target.id) || (r.fromId === target.id && r.toId === me.id)),
       );
       if (pending) throw new Error("A friend request is already pending with this member");
+      // A declined request stays on record quietly (never surfaced as
+      // "declined") so the sender can't keep re-requesting the same person.
+      const previouslyDeclined = (await friendRequestKV.getAllItems()).some(
+        (r) => r.fromId === me.id && r.toId === target.id && r.status === "declined",
+      );
+      if (previouslyDeclined) {
+        throw new Error("A friend request to this member was already sent.");
+      }
       const request: FriendRequest = {
         id: randomUUID(),
         fromId: me.id,
@@ -722,8 +734,13 @@ export const members = {
             `You and ${to.name} are now friends on Adom Circle.`,
           ).catch(() => {});
         }
+        await friendRequestKV.removeItem(request.id);
+      } else {
+        // Decline: keep a quiet record (status declined) — never notify the
+        // sender. The sender's request simply disappears; a later "cannot
+        // request" state keeps things neutral instead of saying "declined".
+        await friendRequestKV.setItem(request.id, { ...request, status: "declined" });
       }
-      await friendRequestKV.removeItem(request.id);
       return { ok: true };
     }),
 
@@ -766,6 +783,11 @@ export const members = {
         outgoing: all
           .filter((r) => r.fromId === me.id)
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        // Members who declined the current user — shown neutrally (never as
+        // "declined"); used to hide the "Add friend" button for them.
+        cannotSendTo: (await friendRequestKV.getAllItems())
+          .filter((r) => r.fromId === me.id && r.status === "declined")
+          .map((r) => r.toId),
       };
     }),
 
@@ -1013,6 +1035,35 @@ export const members = {
         merchantName: input.verified ? (input.merchantName ?? member.merchantName ?? "") : "",
       };
       await memberKV.setItem(updated.id, updated);
+      return sanitizeMember(updated);
+    }),
+
+  // Upload a profile photo and/or cover photo (client resizes + compresses to
+  // a data URL first). Kept small so member records stay light on the volume.
+  uploadImages: os
+    .input(
+      z.object({
+        memberId: z.string(),
+        avatarImage: z.string().optional(),
+        coverImage: z.string().optional(),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const member = await requireMember(input.memberId);
+      if (input.avatarImage) {
+        if (!input.avatarImage.startsWith("data:image/")) throw new Error("Invalid image data");
+        if (input.avatarImage.length > 300_000) throw new Error("Profile photo is too large — use a smaller image");
+      }
+      if (input.coverImage) {
+        if (!input.coverImage.startsWith("data:image/")) throw new Error("Invalid image data");
+        if (input.coverImage.length > 500_000) throw new Error("Cover photo is too large — use a smaller image");
+      }
+      const updated: Member = {
+        ...normalizeMember(member),
+        avatarImage: input.avatarImage !== undefined ? input.avatarImage : (member.avatarImage ?? null),
+        coverImage: input.coverImage !== undefined ? input.coverImage : (member.coverImage ?? null),
+      };
+      await memberKV.setItem(member.id, updated);
       return sanitizeMember(updated);
     }),
 };

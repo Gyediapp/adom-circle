@@ -16,6 +16,7 @@ export const RoomSchema = z.object({
   color: z.string(),
   pinned: z.boolean(),
   allowAnonymous: z.boolean(),
+  maxUsers: z.number().int().min(0).nullable().optional(),
   features: z.array(z.enum(["polls", "kanban", "anonymous"])),
   createdAt: z.string(),
 });
@@ -41,8 +42,15 @@ function normalizeRoom(r: Room): Room {
   return {
     ...r,
     allowAnonymous: r.allowAnonymous ?? r.id === "room-health",
+    maxUsers: r.maxUsers ?? null,
     features: features.length > 0 ? features : idFeatures,
   };
+}
+
+// How many people are currently in a room (live viewers). Used for the room
+// capacity rule — reading is always allowed, sending is blocked when full.
+export function currentRoomViewers(roomId: string): number {
+  return roomViewers.get(roomId)?.size ?? 0;
 }
 
 // ---------- Messages ----------
@@ -278,6 +286,7 @@ export const community = {
         color: z.string(),
         allowAnonymous: z.boolean().optional(),
         features: z.array(z.enum(["polls", "kanban", "anonymous"])).optional(),
+        maxUsers: z.number().int().min(0).nullable().optional(),
       }),
     )
     .handler(async ({ input }) => {
@@ -290,6 +299,7 @@ export const community = {
         color: input.color,
         pinned: false,
         allowAnonymous: input.allowAnonymous ?? Boolean(input.features?.includes("anonymous")),
+        maxUsers: input.maxUsers ?? null,
         features: input.features ?? [],
         createdAt: new Date().toISOString(),
       };
@@ -350,6 +360,7 @@ export const community = {
         description: z.string(),
         icon: z.string(),
         color: z.string().optional(),
+        maxUsers: z.number().int().min(0).nullable().optional(),
       }),
     )
     .handler(async ({ input }) => {
@@ -362,6 +373,7 @@ export const community = {
         description: input.description.trim() || room.description,
         icon: input.icon.trim() || room.icon,
         color: input.color?.trim() || room.color,
+        maxUsers: input.maxUsers !== undefined ? input.maxUsers : (room.maxUsers ?? null),
       };
       await roomKV.setItem(updated.id, updated);
       return updated;
@@ -435,6 +447,19 @@ export const community = {
       const member = await requireMember(input.memberId);
       if (input.audio && (!input.audio.startsWith("data:audio/") || input.audio.length > 600_000)) {
         throw new Error("Voice message is too large (max ~60 seconds)");
+      }
+      // Room capacity: reading is always allowed, but sending is blocked once a
+      // room hits its admin-set maximum (admins/moderators can still post).
+      const roomFull = await (async () => {
+        const rawRoom = await roomKV.getItem(input.roomId);
+        if (!rawRoom) return false;
+        const r = normalizeRoom(rawRoom);
+        if (!r.maxUsers || r.maxUsers <= 0) return false;
+        if (member.role === "admin" || member.role === "moderator") return false;
+        return currentRoomViewers(input.roomId) >= r.maxUsers;
+      })();
+      if (roomFull) {
+        throw new Error("This room is full right now — you can read, but only the current members can chat. Try again a little later.");
       }
       // Content moderation — free local filter always on; AI when configured
       const { localFilter, aiModerate } = await import("../lib/moderation");

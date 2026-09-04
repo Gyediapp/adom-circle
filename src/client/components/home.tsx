@@ -843,10 +843,17 @@ export function Home({
                     <span className="text-xl">{r.icon}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-bold">{r.name}</span>
-                      <span className={cn("mt-0.5 flex items-center gap-1.5 text-[11px] font-semibold", busy ? "text-flag-green" : "text-fg/40")}>
-                        <span className={cn("h-2 w-2 rounded-full", busy ? "animate-pulse-soft bg-flag-green" : "bg-fg/20")} />
-                        {busy ? `${n} ${n === 1 ? "person" : "people"} chatting` : "Quiet right now"}
-                      </span>
+                    <span className={cn("mt-0.5 flex items-center gap-1.5 text-[11px] font-semibold", busy ? "text-flag-green" : "text-fg/40")}>
+                      <span className={cn("h-2 w-2 rounded-full", busy ? "animate-pulse-soft bg-flag-green" : "bg-fg/20")} />
+                      {busy
+                        ? r.maxUsers
+                          ? `${n}/${r.maxUsers} ${n === 1 ? "person" : "people"} chatting`
+                          : `${n} ${n === 1 ? "person" : "people"} chatting`
+                        : "Quiet right now"}
+                      {r.maxUsers && n >= r.maxUsers && (
+                        <span className="rounded-full bg-flag-red/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-flag-red">full</span>
+                      )}
+                    </span>
                     </span>
                     <span className="shrink-0 rounded-full bg-ink px-3.5 py-1.5 text-[11px] font-bold text-cream">
                       {busy ? "Join chat" : "Start chat"}

@@ -156,11 +156,24 @@ export function Avatar({
   name,
   size = 40,
   className,
+  src,
 }: {
   name: string;
   size?: number;
   className?: string;
+  src?: string | null;
 }) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        title={name}
+        className={cn("rounded-full object-cover shrink-0", className)}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <div
       className={cn(

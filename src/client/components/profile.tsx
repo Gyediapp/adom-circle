@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { Crown, MapPin, Vote, ShieldCheck, Award, TrendingUp, Eye, UserPlus, Check, X, Clock, Users } from "lucide-react";
+import { Crown, MapPin, Vote, ShieldCheck, Award, TrendingUp, Eye, UserPlus, Check, X, Clock, Users, Camera, ImagePlus, Loader2 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { Avatar, Chip, Modal, ProgressBar, Button, Toggle } from "./ui";
@@ -9,8 +10,38 @@ import { rankFor, nextRank, rankProgress, RANKS } from "@/server/data/ranks";
 import { regionName } from "@/server/data/regions";
 import { cn } from "@/client/lib/format";
 
+// Downscale + compress an image file to a small JPEG data URL (client-side,
+// so member records stay light and nothing heavy is uploaded).
+async function readImageFile(file: File, maxW: number, maxH: number): Promise<string> {
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result as string);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = dataUrl;
+  });
+  const scale = Math.min(1, maxW / img.width, maxH / img.height);
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  if (!ctx) throw new Error("Could not process this image");
+  ctx.fillStyle = "#faf6ec"; // opaque backdrop for transparent images (PNG)
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  return c.toDataURL("image/jpeg", 0.82);
+}
+
 export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { user, toast, refresh } = useStore();
+  const { user, toast, refresh, setUser } = useStore();
+  const [photoBusy, setPhotoBusy] = useState<"avatar" | "cover" | null>(null);
 
   const { data: member } = useQuery(
     queryClient.members.byId.queryOptions({
@@ -38,6 +69,27 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
     }
   };
 
+  const onPickPhoto = async (kind: "avatar" | "cover", file?: File | null) => {
+    if (!file || !user) return;
+    setPhotoBusy(kind);
+    try {
+      const data =
+        kind === "avatar" ? await readImageFile(file, 512, 512) : await readImageFile(file, 1280, 420);
+      const updated = await rpcClient.members.uploadImages({
+        memberId: user.id,
+        avatarImage: kind === "avatar" ? data : undefined,
+        coverImage: kind === "cover" ? data : undefined,
+      });
+      setUser(updated);
+      tanQuery.invalidateQueries({ queryKey: ["members", "byId", user.id] });
+      toast(kind === "avatar" ? "Profile photo updated 📸" : "Cover photo updated 📸");
+    } catch (e: any) {
+      toast(e?.message ?? "Could not upload that photo", "error");
+    } finally {
+      setPhotoBusy(null);
+    }
+  };
+
   const savePrivacy = useMutation(
     queryClient.members.update.mutationOptions({
       onSuccess: () => {
@@ -59,9 +111,16 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
   return (
     <Modal open={open} onClose={onClose}>
       <div className="p-6 sm:p-8">
+        {/* Cover photo banner */}
+        {member.coverImage && (
+          <div className="relative -mx-6 -mt-6 mb-5 h-24 overflow-hidden rounded-t-3xl sm:-mx-8 sm:-mt-8">
+            <img src={member.coverImage} alt="" className="h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink/40 to-transparent" />
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Avatar name={member.name} size={64} className="ring-4 ring-flag-gold" />
+          <Avatar name={member.name} size={64} className="ring-4 ring-flag-gold" src={member.avatarImage} />
           <div className="min-w-0">
             <p className="font-display text-xl font-bold leading-tight">{member.name}</p>
             <p className="mt-1 text-sm text-fg/50">
@@ -193,6 +252,69 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
               Add friends from the community — a request is only accepted when the other person agrees.
             </p>
           )}
+        </div>
+
+        {/* Photos — profile photo + cover */}
+        <div className="mt-6">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-fg/50">
+            <Camera size={13} className="text-flag-red" /> Profile photos
+          </p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 rounded-2xl border border-fg/10 bg-soft/40 px-4 py-2.5">
+              <Avatar name={member.name} size={44} src={member.avatarImage} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-bold">Profile photo</p>
+                <p className="text-[11px] text-fg/45">Shown next to your name across the circle</p>
+              </div>
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={!!photoBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    onPickPhoto("avatar", f);
+                  }}
+                />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-fg/15 px-3 py-1.5 text-xs font-bold text-fg/70 hover:border-flag-red hover:text-flag-red transition-colors">
+                  {photoBusy === "avatar" ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />}
+                  {member.avatarImage ? "Change" : "Upload"}
+                </span>
+              </label>
+            </div>
+            <div className="flex items-center gap-3 rounded-2xl border border-fg/10 bg-soft/40 px-4 py-2.5">
+              <span className="flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-ink/5">
+                {member.coverImage ? (
+                  <img src={member.coverImage} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <ImagePlus size={16} className="text-fg/35" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-bold">Cover photo</p>
+                <p className="text-[11px] text-fg/45">The banner at the top of your profile</p>
+              </div>
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={!!photoBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    onPickPhoto("cover", f);
+                  }}
+                />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-fg/15 px-3 py-1.5 text-xs font-bold text-fg/70 hover:border-flag-green hover:text-flag-green transition-colors">
+                  {photoBusy === "cover" ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
+                  {member.coverImage ? "Change" : "Upload"}
+                </span>
+              </label>
+            </div>
+          </div>
         </div>
 
         {/* Delegation */}

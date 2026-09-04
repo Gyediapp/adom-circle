@@ -1415,6 +1415,7 @@ function ModerationPanel() {
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editIcon, setEditIcon] = useState("");
+  const [editMax, setEditMax] = useState("");
 
   return (
     <div className="space-y-6">
@@ -1520,6 +1521,17 @@ function ModerationPanel() {
                     className="w-full rounded-xl border border-fg/15 bg-card px-3 py-1.5 text-sm outline-none"
                   />
                   <div className="flex items-center gap-2">
+                    <input
+                      value={editMax}
+                      onChange={(e) => setEditMax(e.target.value)}
+                      type="number"
+                      min={0}
+                      placeholder="Max people (blank = no limit)"
+                      className="flex-1 rounded-xl border border-fg/15 bg-card px-3 py-1.5 text-sm outline-none"
+                    />
+                    <span className="text-[11px] font-semibold text-fg/40">0 or blank = unlimited</span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <Button
                       variant="dark"
                       className="px-4 py-1.5 text-xs"
@@ -1532,6 +1544,7 @@ function ModerationPanel() {
                           name: editName.trim(),
                           description: editDesc.trim(),
                           icon: editIcon.trim(),
+                          maxUsers: editMax.trim() === "" ? null : Math.max(0, Number(editMax) || 0),
                         })
                       }
                     >
@@ -1546,7 +1559,9 @@ function ModerationPanel() {
               ) : (
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold">{r.name} {r.pinned && <Pin size={11} className="inline text-flag-red" />}</p>
-                  <p className="truncate text-[12px] text-fg/45">{r.description} · {r.messageCount} messages</p>
+                  <p className="truncate text-[12px] text-fg/45">{r.description} · {r.messageCount} messages
+                    {r.maxUsers ? ` · max ${r.maxUsers} people` : ""}
+                  </p>
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {(["polls", "kanban", "anonymous"] as const).map((f) => {
                       const on = (r.features ?? []).includes(f);
@@ -1578,6 +1593,7 @@ function ModerationPanel() {
                   setEditName(r.name);
                   setEditDesc(r.description);
                   setEditIcon(r.icon);
+                  setEditMax(r.maxUsers ? String(r.maxUsers) : "");
                 }}
                 className="rounded-full p-2 text-fg/30 hover:text-flag-green hover:bg-flag-green/5 cursor-pointer"
                 title="Edit room"

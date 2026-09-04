@@ -240,7 +240,7 @@ export function Navbar({
                 className="cursor-pointer"
                 title={user.name}
               >
-                <Avatar name={user.name} size={38} className="ring-2 ring-flag-gold" />
+                <Avatar name={user.name} size={38} className="ring-2 ring-flag-gold" src={user.avatarImage} />
               </button>
               <button
                 onClick={() => {

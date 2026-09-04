@@ -29,6 +29,7 @@ import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { Button, Card, Avatar, Modal } from "./ui";
 import { RankChip } from "@/client/lib/ranks";
+import { rankFor } from "@/server/data/ranks";
 import { timeAgo, cn } from "@/client/lib/format";
 import { regionName } from "@/server/data/regions";
 import type { Message, ReactionType } from "@/server/rpc/community";
@@ -696,7 +697,12 @@ export function Community() {
                 {(presence?.[r.id] ?? 0) > 0 && (
                   <span className={cn("inline-flex items-center gap-1", activeRoom?.id === r.id ? "text-gold-soft" : "text-flag-green")}>
                     <span className="h-1.5 w-1.5 rounded-full bg-flag-green" />
-                    {presence![r.id]} online
+                    {r.maxUsers ? `${presence![r.id]}/${r.maxUsers}` : presence![r.id]} online
+                  </span>
+                )}
+                {r.maxUsers && (presence?.[r.id] ?? 0) >= r.maxUsers && (
+                  <span className={cn("inline-flex items-center gap-1", activeRoom?.id === r.id ? "text-gold-soft" : "text-flag-red")}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-flag-red" /> full
                   </span>
                 )}
               </p>
@@ -1013,16 +1019,25 @@ export function Community() {
 
           {view === "chat" && activeRoom && (
             <Card className="flex h-[80vh] flex-col overflow-hidden">
-              <div className="flex items-center justify-between border-b border-fg/8 px-5 py-3.5">
-                <div>
-                  <p className="font-bold">{activeRoom.icon} {activeRoom.name}</p>
-                  <p className="text-[12px] text-fg/50">{activeRoom.description}</p>
+              <div className="flex items-center justify-between gap-3 border-b border-fg/8 px-5 py-3.5">
+                <div className="min-w-0">
+                  <p className="truncate font-bold">{activeRoom.icon} {activeRoom.name}</p>
+                  <p className="truncate text-[12px] text-fg/50">{activeRoom.description}</p>
                 </div>
-                <span className="flex items-center gap-1.5 rounded-full bg-flag-green/10 px-3 py-1 text-[11px] font-bold text-flag-green">
+                <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-flag-green/10 px-3 py-1 text-[11px] font-bold text-flag-green">
                   <span className="h-2 w-2 animate-pulse-soft rounded-full bg-flag-green" />
-                  {Math.max(1, presence?.[activeRoom.id] ?? 1)} online
+                  {activeRoom.maxUsers
+                    ? `${Math.min(Math.max(1, presence?.[activeRoom.id] ?? 1), activeRoom.maxUsers)}/${activeRoom.maxUsers} online`
+                    : `${Math.max(1, presence?.[activeRoom.id] ?? 1)} online`}
                 </span>
               </div>
+              {activeRoom.maxUsers &&
+                (presence?.[activeRoom.id] ?? 0) >= activeRoom.maxUsers &&
+                !(me && (me.role === "admin" || me.role === "moderator")) && (
+                  <div className="flex items-center justify-center gap-2 border-b border-flag-gold/30 bg-flag-gold/15 px-4 py-2 text-center text-[12px] font-semibold text-clay">
+                    <Users size={13} className="shrink-0" /> This room is full — you can read, but only current members can chat right now.
+                  </div>
+                )}
 
               <div ref={chatScroll} className="flex-1 space-y-4 overflow-y-auto bg-soft/40 px-4 py-4 sm:px-5">
                 {msgList.length === 0 && (
@@ -1170,9 +1185,9 @@ export function Community() {
                   </div>
                 )}
                 {audioData ? (
-                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-cream px-3 py-2 ring-1 ring-ink/15">
+                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-flag-gold/15 px-3 py-2 ring-1 ring-flag-gold/50">
                     <Mic size={14} className="shrink-0 text-flag-red" />
-                    <audio controls src={audioData} className="h-9 w-full min-w-0 flex-1 sm:w-64 sm:flex-none [&::-webkit-media-controls-panel]:bg-cream" />
+                    <audio controls src={audioData} className="h-9 w-full min-w-0 flex-1 rounded-lg bg-white sm:w-64 sm:flex-none [&::-webkit-media-controls-panel]:bg-white" />
                     <Button
                       variant="dark"
                       className="rounded-full px-4 py-1.5 text-xs"
@@ -1563,11 +1578,11 @@ const VoiceMessage = memo(function VoiceMessage({
   return (
     <div
       className={cn(
-        "mb-1.5 rounded-xl p-1.5 ring-1",
-        mine ? "bg-cream ring-ink/15" : "bg-soft ring-fg/10",
+        "mb-1.5 rounded-xl bg-flag-gold/15 p-1.5 ring-1 ring-flag-gold/50",
+        mine && "bg-flag-gold/20",
       )}
     >
-      <p className="flex items-center gap-1 px-1 pt-0.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-fg/55">
+      <p className="flex items-center gap-1 px-1 pt-0.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-clay">
         <Mic size={10} className="text-flag-red" /> Voice message
       </p>
       {src ? (
@@ -1576,6 +1591,7 @@ const VoiceMessage = memo(function VoiceMessage({
             ref={audioRef}
             src={src}
             preload="metadata"
+            className="h-10 w-full max-w-[240px] rounded-lg bg-white sm:w-64 [&::-webkit-media-controls-panel]:bg-white"
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
             onEnded={() => {
@@ -1592,7 +1608,7 @@ const VoiceMessage = memo(function VoiceMessage({
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors cursor-pointer",
               playing
                 ? "bg-flag-red text-cream hover:bg-[#a80d1e]"
-                : "bg-ink text-cream hover:bg-ink-2",
+                : "bg-gradient-to-b from-[#ffdf4d] via-flag-gold to-[#e8b30a] text-ink shadow-sm hover:from-[#ffe98a] hover:to-gold-deep",
             )}
             title={playing ? "Stop" : "Play"}
             aria-label={playing ? "Stop voice message" : "Play voice message"}
@@ -1603,10 +1619,10 @@ const VoiceMessage = memo(function VoiceMessage({
               <Play size={12} className="ml-0.5 fill-current" />
             )}
           </button>
-          <div className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ink/10">
+          <div className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ink/15">
             <div className="absolute inset-y-0 left-0 rounded-full bg-flag-red" style={{ width: `${pct}%` }} />
           </div>
-          <span className="shrink-0 text-[10px] font-bold tabular-nums text-fg/55">{fmtTime(cur)}</span>
+          <span className="shrink-0 text-[10px] font-bold tabular-nums text-fg/70">{fmtTime(cur)}</span>
         </div>
       ) : loading ? (
         <button
@@ -1629,7 +1645,7 @@ const VoiceMessage = memo(function VoiceMessage({
       ) : (
         <button
           onClick={load}
-          className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-cream hover:bg-ink-2 transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 rounded-lg bg-gradient-to-b from-[#ffdf4d] via-flag-gold to-[#e8b30a] px-3 py-1.5 text-xs font-bold text-ink shadow-sm hover:from-[#ffe98a] hover:to-gold-deep transition-all cursor-pointer"
           title="Play voice message"
         >
           <Play size={13} className="fill-current" /> Play voice message
@@ -1700,38 +1716,51 @@ function ChatMessage({
   const deleted = m.deleted;
   const pending = m.pending || m.failed;
   const displayName = m.anonymous ? "Anonymous" : m.authorName;
+  // Compact chat layout: only 👍 inline; the rest live in a small popover.
+  const [reactOpen, setReactOpen] = useState(false);
+  const likeIds = reactions.like ?? [];
+  const likeCount = likeIds.length;
+  const liked = likeIds.includes(me?.id ?? "");
+  const extraReactions = REACTIONS.filter((r) => r.type !== "like");
+  const rank = !m.anonymous ? rankFor(m.authorPoints) : null;
 
   return (
     <div className={cn("group", mine && "flex flex-col items-end")} style={{ marginLeft: mine ? 0 : indent }}>
-      <div className={cn("flex gap-2.5", mine && "flex-row-reverse")}>
-        <button
-          onClick={onProfile}
-          className="cursor-pointer shrink-0 rounded-full transition-opacity hover:opacity-80 ml-0.5"
-          title="View profile"
-        >
-          <Avatar name={m.anonymous ? "Anonymous" : m.authorName} size={34} />
-        </button>
-        <div className={cn("max-w-[78%] sm:max-w-[70%]", mine && "text-right")}>
-          <div className={cn("mb-1 flex items-center gap-2 flex-wrap", mine && "justify-end")}>
-            <span className="text-[12px] font-bold">{displayName}</span>
-            {m.anonymous && (
-              <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[10px] font-semibold text-fg/50 uppercase tracking-wide">
-                anonymous
-              </span>
-            )}
-            {verified && (
-              <span className="flex items-center gap-0.5 rounded-full bg-flag-green/10 px-2 py-0.5 text-[10px] font-bold text-flag-green">
-                <CheckCircle2 size={10} /> Verified business
-              </span>
-            )}
-            {!m.anonymous && <RankChip points={m.authorPoints} role={m.authorRole} />}
-            <span className="text-[10px] text-fg/40">
-              {!m.anonymous && regionName(m.authorRegion) ? `${regionName(m.authorRegion)} · ` : ""}
-              {/* Timezone-aware: show local time + Ghana (GMT) time */}
-              {localTime(m.sentAt)}
-              {m.editedAt && !deleted && <span className="ml-1 italic text-fg/30">· edited</span>}
+      <div className={cn("flex gap-1.5", mine && "flex-row-reverse")}>
+        {/* Author rail: rank pill · avatar · name (keeps the bubble uncluttered) */}
+        <div className="flex w-11 shrink-0 flex-col items-center pt-0.5">
+          {rank && (
+            <span
+              className="mb-1 max-w-full truncate rounded-full px-1 py-px text-[7px] font-bold leading-tight"
+              style={{ background: `${rank.color}1a`, color: rank.color }}
+              title={rank.title}
+            >
+              {rank.title}
             </span>
-          </div>
+          )}
+          <button
+            onClick={onProfile}
+            className="relative shrink-0 cursor-pointer rounded-full transition-opacity hover:opacity-80"
+            title="View profile"
+          >
+            <Avatar name={displayName} size={32} />
+            {verified && (
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-flag-green text-cream ring-2 ring-card">
+                <CheckCircle2 size={8} />
+              </span>
+            )}
+          </button>
+          <span
+            className={cn(
+              "mt-1 w-full truncate text-center text-[8.5px] font-semibold leading-tight",
+              m.anonymous ? "italic text-fg/40" : "text-fg/55",
+            )}
+            title={displayName}
+          >
+            {displayName}
+          </span>
+        </div>
+        <div className={cn("min-w-0 max-w-[76%] sm:max-w-[70%]", mine && "text-right")}>
 
           {parentName && !deleted && (
             <p className={cn("mb-1 flex items-center gap-1 text-[11px] font-semibold text-flag-red/70", mine && "justify-end")}>
@@ -1799,42 +1828,82 @@ function ChatMessage({
             </div>
           )}
 
+          {/* Meta under the bubble: time · location · edited */}
+          <div className={cn("mt-1 flex items-center gap-1 px-1 text-[9px] font-medium text-fg/35", mine && "justify-end")}>
+            <span>{localTime(m.sentAt)}</span>
+            {!m.anonymous && regionName(m.authorRegion) && (
+              <>
+                <span>·</span>
+                <span>{regionName(m.authorRegion)}</span>
+              </>
+            )}
+            {m.editedAt && !deleted && <span className="italic">· edited</span>}
+          </div>
+
           {/* Reactions + actions */}
           {!deleted && !pending && (
-            <div className={cn("mt-1.5 flex flex-wrap items-center gap-1", mine && "justify-end")}>
-              {REACTIONS.map((r) => {
-                const ids = reactions[r.type] ?? [];
-                const count = ids.length;
-                const reacted = ids.includes(me?.id ?? "");
-                if (count === 0 && !reacted) {
-                  return (
-                    <button
-                      key={r.type}
-                      onClick={() => onReact(r.type)}
-                      title={r.label}
-                      className="flex h-7 w-7 items-center justify-center rounded-full text-[13px] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-ink/5 pointer-coarse:opacity-100 cursor-pointer"
-                    >
-                      {r.emoji}
-                    </button>
-                  );
-                }
-                return (
-                  <button
-                    key={r.type}
-                    onClick={() => onReact(r.type)}
-                    title={`${r.label}${count > 0 ? ` — ${ids.length} ${ids.length === 1 ? "person" : "people"}` : ""}`}
+            <div className={cn("mt-1 flex flex-wrap items-center gap-1", mine && "justify-end")}>
+              {/* Only 👍 inline — keeps messages uncluttered */}
+              <button
+                onClick={() => onReact("like")}
+                title={liked ? "Unlike" : "Like"}
+                className={cn(
+                  "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-semibold transition-colors cursor-pointer",
+                  liked
+                    ? "border-flag-gold bg-flag-gold/25 text-fg"
+                    : "border-fg/10 bg-card text-fg/55 hover:border-flag-gold/70",
+                )}
+              >
+                <span>👍</span>
+                {likeCount > 0 && <span>{likeCount}</span>}
+              </button>
+
+              {/* All other reactions live in a small popover */}
+              <div className="relative">
+                <button
+                  onClick={() => setReactOpen((o) => !o)}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-full border transition-colors cursor-pointer",
+                    reactOpen
+                      ? "border-flag-gold bg-flag-gold/20 text-fg"
+                      : "border-fg/10 bg-card text-fg/45 hover:border-flag-gold/70 hover:text-fg",
+                  )}
+                  title="More reactions"
+                  aria-label="More reactions"
+                >
+                  <SmilePlus size={13} />
+                </button>
+                {reactOpen && (
+                  <div
                     className={cn(
-                      "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-semibold transition-colors cursor-pointer",
-                      reacted
-                        ? "border-flag-gold bg-flag-gold/20 text-fg"
-                        : "border-fg/10 bg-card text-fg/60 hover:border-flag-gold/60",
+                      "absolute bottom-full z-30 mb-1 flex items-center gap-0.5 rounded-2xl border border-fg/10 bg-card px-1.5 py-1 shadow-2xl animate-fade-up",
+                      mine ? "right-0" : "left-0",
                     )}
                   >
-                    <span>{r.emoji}</span>
-                    {count > 0 && <span>{count}</span>}
-                  </button>
-                );
-              })}
+                    {extraReactions.map((r) => {
+                      const ids = reactions[r.type] ?? [];
+                      const active = ids.includes(me?.id ?? "");
+                      return (
+                        <button
+                          key={r.type}
+                          onClick={() => {
+                            onReact(r.type);
+                            setReactOpen(false);
+                          }}
+                          title={r.label}
+                          className={cn(
+                            "flex h-8 items-center gap-1 rounded-full px-1.5 text-base transition-colors cursor-pointer",
+                            active ? "bg-flag-gold/25" : "hover:bg-ink/5",
+                          )}
+                        >
+                          <span>{r.emoji}</span>
+                          {ids.length > 0 && <span className="text-[10px] font-bold text-fg/50">{ids.length}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               <span className={cn("mx-0.5 hidden h-4 w-px bg-fg/10 sm:block", !hasReactions && "sm:hidden")} />
 
@@ -1907,7 +1976,7 @@ function ActionBtn({
       onClick={onClick}
       title={title}
       className={cn(
-        "flex h-7 w-7 items-center justify-center rounded-full text-fg/40 transition-colors cursor-pointer",
+        "flex h-7 w-7 items-center justify-center rounded-full text-fg/40 transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
         active ? "text-flag-green" : danger ? "hover:text-flag-red hover:bg-flag-red/5" : "hover:text-fg hover:bg-ink/5",
       )}
     >

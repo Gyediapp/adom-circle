@@ -45,6 +45,9 @@ export function MemberModal({
   const isFriend = !!member && (user?.friends ?? []).includes(member.id);
   const incomingReq = reqs?.incoming.find((r) => r.fromId === member?.id);
   const outgoingReq = reqs?.outgoing.find((r) => r.toId === member?.id);
+  // A declined request is never shown as "declined" — the sender simply stops
+  // being able to request again (neutral, no hurtful wording).
+  const cannotRequest = !!member && (reqs?.cannotSendTo ?? []).includes(member.id);
 
   const refreshAll = async () => {
     qc.invalidateQueries({ queryKey: ["members"] });
@@ -68,7 +71,7 @@ export function MemberModal({
     <Modal open={open} onClose={onClose}>
       <div className="p-6 sm:p-8">
         <div className="flex flex-col items-center text-center">
-          <Avatar name={member.name} size={76} className="ring-2 ring-flag-gold" />
+          <Avatar name={member.name} size={76} className="ring-2 ring-flag-gold" src={member.avatarImage} />
           <div className="mt-3 flex items-center gap-2">
             <p className="font-display text-xl font-bold">{member.name}</p>
             <span
@@ -206,6 +209,10 @@ export function MemberModal({
                   <X size={15} /> Cancel request
                 </Button>
               </div>
+            ) : cannotRequest ? (
+              <p className="flex items-center justify-center gap-1.5 rounded-full border border-fg/10 bg-soft/50 px-4 py-2.5 text-[12px] font-semibold text-fg/45">
+                <Clock size={13} /> Friend requests with this member are unavailable
+              </p>
             ) : (
               <Button
                 variant="gold"
