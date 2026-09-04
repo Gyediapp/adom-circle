@@ -653,28 +653,50 @@ export const members = {
   // Public "Meet the circle" directory — powers the rolling avatar strip on
   // the landing page. Deliberately minimal: no email/phone/points, respects
   // each member's privacy switches, and is capped so it stays light.
+  //
+  // Selection: members who are ONLINE right now come first (the strip feels
+  // alive), sorted by most recently active; remaining slots up to MAX are
+  // filled with the most recently registered members (fresh faces encourage
+  // others to join). Never returns more than MAX entries.
   directory: os.handler(async () => {
     const all = await memberKV.getAllItems();
     const now = Date.now();
     const ONLINE_MS = 5 * 60 * 1000;
-    return all
+    const MAX = 40;
+
+    const entries = all
       .filter((m) => m.status !== "suspended")
       .map((m) => normalizeMember(m))
-      .map((m) => ({
-        id: m.id,
-        name: m.name,
-        avatarImage: m.avatarImage ?? null,
-        role: m.role,
-        points: m.points,
-        online: !!m.lastSeenAt && now - new Date(m.lastSeenAt).getTime() < ONLINE_MS,
-        region: m.privacy?.showRegion === false ? null : (m.region || null),
-        hometown: m.privacy?.showHometown === false ? null : (m.hometown || null),
-        diasporaCountry: m.diasporaCountry || null,
-        church: m.church || null,
-        lastSeenAt: m.lastSeenAt ?? null,
-      }))
-      .sort((a, b) => Number(b.online) - Number(a.online) || b.points - a.points || a.name.localeCompare(b.name))
-      .slice(0, 40);
+      .map((m) => {
+        const lastSeen = m.lastSeenAt ? new Date(m.lastSeenAt).getTime() : 0;
+        return {
+          id: m.id,
+          name: m.name,
+          avatarImage: m.avatarImage ?? null,
+          role: m.role,
+          points: m.points,
+          online: !!m.lastSeenAt && now - lastSeen < ONLINE_MS,
+          lastSeenAt: m.lastSeenAt ?? null,
+          joinedAt: m.joinedAt,
+          region: m.privacy?.showRegion === false ? null : (m.region || null),
+          hometown: m.privacy?.showHometown === false ? null : (m.hometown || null),
+          diasporaCountry: m.diasporaCountry || null,
+          church: m.church || null,
+        };
+      });
+
+    // Online first (most recently active leads), then newest registrants
+    const online = entries
+      .filter((e) => e.online)
+      .sort((a, b) => (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? ""))
+      .slice(0, MAX);
+    const offline = entries
+      .filter((e) => !e.online)
+      .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt))
+      .slice(0, Math.max(0, MAX - online.length));
+
+    // joinedAt is only used for ordering — don't ship it
+    return [...online, ...offline].map(({ joinedAt: _j, ...entry }) => entry);
   }),
 
   follow: os
