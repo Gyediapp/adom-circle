@@ -154,6 +154,32 @@ body {
   scrollbar-width: none;
 }
 
+/* Bottom-sheet modal panel — height cap with a safe fallback.
+   dvh (dynamic viewport height) is unsupported on older Android / in-app
+   browsers, which would DROP the whole max-height and let the sheet run off
+   the top of the screen. Declaring vh first, then dvh, means every browser
+   gets a cap: old ones use vh, modern ones use the better dvh. */
+.sheet-panel {
+  max-height: 92vh;
+  max-height: 92dvh;
+}
+@media (min-width: 640px) {
+  .sheet-panel {
+    max-height: 88vh;
+    max-height: 88dvh;
+  }
+}
+.sheet-scroll {
+  -webkit-overflow-scrolling: touch; /* momentum scrolling on older iOS */
+  overscroll-behavior: contain;
+}
+
+/* Full-height hero with the same vh → svh fallback pattern */
+.hero-full {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
 /* Button shine sweep — premium micro-interaction */
 .btn-shine {
   position: relative;

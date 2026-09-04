@@ -206,7 +206,7 @@ export function Home({
   return (
     <div>
       {/* ================= HERO ================= */}
-      <section className="relative min-h-[100svh] overflow-hidden bg-ink text-cream">
+      <section className="hero-full relative overflow-hidden bg-ink text-cream">
         <div className="absolute inset-0">
           <img
             src="/output/images/hero.jpg"
@@ -225,7 +225,7 @@ export function Home({
           <LogoMark size={420} />
         </div>
 
-        <div className="relative mx-auto flex min-h-[100svh] max-w-7xl flex-col justify-center px-4 pb-24 pt-32 sm:px-6">
+        <div className="hero-full relative mx-auto flex max-w-7xl flex-col justify-center px-4 pb-24 pt-32 sm:px-6">
           <div className="max-w-3xl">
             <p className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-cream/20 bg-page/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-gold-soft backdrop-blur">
               <Star size={13} className="text-flag-gold" />
@@ -251,6 +251,13 @@ export function Home({
                 </button>
               ))}
             </div>
+
+            {/* MEET THE CIRCLE — live member strip (social proof above the fold) */}
+            {directory && directory.length > 0 && (
+              <div className="animate-fade-up mb-8" style={{ animationDelay: "0.08s" }}>
+                <MembersMarquee members={directory} user={user} onAuth={onAuth} />
+              </div>
+            )}
 
             {/* Social links — follow the circle */}
             <div className="animate-fade-up mb-8 flex flex-wrap items-center gap-3" style={{ animationDelay: "0.1s" }}>
@@ -340,11 +347,6 @@ export function Home({
         </div>
         <div className="flag-stripes h-[3px] w-full" aria-hidden />
       </div>
-
-      {/* ================= MEET THE CIRCLE (member strip) ================= */}
-      {directory && directory.length > 0 && (
-        <MembersMarquee members={directory} user={user} onAuth={onAuth} />
-      )}
 
       {/* ================= TABLE OF CONTENTS ================= */}
       <div className="sticky top-[96px] z-30 border-b border-fg/5 bg-page/90 backdrop-blur-xl">
@@ -1176,10 +1178,11 @@ function ValueIcon({ icon }: { icon: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Meet the Circle — a slow rolling strip of member avatars shown on   */
-/* the landing page (visible to visitors before they join). Each shows */
-/* online/offline; tapping opens a small, privacy-light card with only */
-/* where they are (region/diaspora), denomination (if given) + status. */
+/* Meet the Circle — a slim rolling strip of member avatars embedded   */
+/* in the hero (visible to visitors before they join). Each avatar     */
+/* shows online/offline; tapping opens a small, privacy-light card     */
+/* with only where they are (region/diaspora), denomination (if given) */
+/* and status. First name is shown on hover/tap via the title.         */
 /* ------------------------------------------------------------------ */
 
 type DirEntry = Awaited<ReturnType<typeof rpcClient.members.directory>>[number];
@@ -1196,79 +1199,60 @@ function MembersMarquee({
   const [peek, setPeek] = useState<DirEntry | null>(null);
   const [fullId, setFullId] = useState<string | null>(null);
 
-  const open = (m: DirEntry) => setPeek(m);
-
   const showOnline = members.filter((m) => m.online).length;
 
   return (
-    <section className="relative overflow-hidden bg-ink py-16 text-cream sm:py-20">
-      <div className="hero-grid absolute inset-0 opacity-40" aria-hidden />
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="flex flex-wrap items-end justify-between gap-5">
-          <div className="max-w-xl">
-            <p className="mb-3 inline-flex items-center gap-2.5 text-xs font-bold uppercase tracking-[0.25em] text-flag-gold">
-              <span className="flag-stripes h-[3px] w-10 rounded-full" aria-hidden />
-              The community
-            </p>
-            <h2 className="font-display text-3xl font-bold leading-tight sm:text-4xl">
-              Meet the Circle
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-cream/60">
-              Real Ghanaians at home and in the diaspora — contributing to peace, projects and
-              progress. Tap an avatar to see where they're from.
-            </p>
-          </div>
-          <div className="flex items-center gap-4 rounded-2xl border border-cream/10 bg-cream/5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-cream/55">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-flag-green ring-2 ring-flag-green/25" />
-              {showOnline} online
+    <>
+      <div className="text-cream">
+        {/* Slim caption — reads as a live social proof line, not a big heading */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-cream/55">
+            <span className="flag-stripes h-[3px] w-6 rounded-full" aria-hidden />
+            Meet the Circle
+          </span>
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-cream/45">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-flag-green opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-flag-green" />
             </span>
-            <span className="h-3 w-px bg-cream/15" />
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-cream/25" />
-              Offline
-            </span>
-          </div>
+            {showOnline} online now
+          </span>
         </div>
 
-        {/* Rolling strip — two copies of the list for a seamless loop; hover pauses */}
-        <div className="group relative mt-10 overflow-hidden">
+        {/* Rolling avatars — two copies for a seamless loop; pauses on hover */}
+        <div className="group relative mt-3 overflow-hidden">
           <div
-            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-ink to-transparent sm:w-24"
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-ink to-transparent"
             aria-hidden
           />
           <div
-            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-ink to-transparent sm:w-24"
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-ink to-transparent"
             aria-hidden
           />
-          <div className="flex w-max animate-marquee gap-4 pr-4 group-hover:[animation-play-state:paused] sm:gap-5">
+          <div className="flex w-max animate-marquee gap-3 pr-3 group-hover:[animation-play-state:paused]">
             {[0, 1].map((copy) => (
-              <div key={copy} aria-hidden={copy === 1} className="flex gap-4 sm:gap-5">
+              <div key={copy} aria-hidden={copy === 1} className="flex gap-3">
                 {members.map((m) => (
                   <button
                     key={`${m.id}-${copy}`}
-                    onClick={() => open(m)}
-                    className="group/av w-16 shrink-0 cursor-pointer text-center"
-                    title={`${m.name} — ${m.online ? "Online" : "Offline"}`}
+                    onClick={() => setPeek(m)}
+                    className="group/av relative block h-12 w-12 shrink-0 cursor-pointer rounded-full"
+                    title={`${m.name} — ${m.online ? "Online now" : "Offline"}`}
+                    aria-label={`${m.name}, ${m.online ? "online" : "offline"}`}
                   >
-                    <span className="relative mx-auto block h-14 w-14 sm:h-16 sm:w-16">
-                      <Avatar
-                        name={m.name}
-                        size={60}
-                        src={m.avatarImage}
-                        className="ring-2 ring-cream/15 transition-all duration-200 group-hover/av:ring-flag-gold group-hover/av:shadow-glow-gold"
-                      />
-                      <span
-                        className={cn(
-                          "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-ink",
-                          m.online ? "bg-flag-green" : "bg-cream/25",
-                        )}
-                        aria-hidden
-                      />
-                    </span>
-                    <span className="mt-1.5 block truncate text-[10px] font-semibold text-cream/55 group-hover/av:text-cream">
-                      {m.name.split(" ")[0]}
-                    </span>
+                    <Avatar
+                      name={m.name}
+                      size={48}
+                      src={m.avatarImage}
+                      className="ring-2 ring-cream/20 transition-all duration-200 group-hover/av:ring-flag-gold group-hover/av:shadow-glow-gold"
+                    />
+                    <span
+                      className={cn(
+                        "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-ink",
+                        m.online ? "bg-flag-green" : "bg-cream/25",
+                      )}
+                      aria-hidden
+                    />
                   </button>
                 ))}
               </div>
@@ -1338,6 +1322,6 @@ function MembersMarquee({
 
       {/* Full member profile (logged-in visitors) */}
       <MemberModal memberId={fullId} open={!!fullId} onClose={() => setFullId(null)} />
-    </section>
+    </>
   );
 }

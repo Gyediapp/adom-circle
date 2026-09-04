@@ -136,7 +136,7 @@ export function Modal({
       <div className="absolute inset-0 bg-ink/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className={cn(
-          "relative z-10 flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-page shadow-2xl sm:max-h-[88vh] sm:rounded-3xl animate-fade-up",
+          "sheet-panel relative z-10 flex w-full flex-col overflow-hidden rounded-t-3xl bg-page shadow-2xl sm:rounded-3xl animate-fade-up",
           wide ? "sm:max-w-2xl" : "sm:max-w-md",
         )}
       >
@@ -151,7 +151,7 @@ export function Modal({
         >
           <X size={18} />
         </button>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        <div className="sheet-scroll min-h-0 flex-1 overflow-y-auto pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {children}
         </div>
       </div>
