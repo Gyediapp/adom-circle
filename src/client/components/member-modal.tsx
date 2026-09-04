@@ -5,6 +5,7 @@ import { useStore } from "@/client/store";
 import { Modal, Avatar, Button, Chip } from "./ui";
 import { RankChip } from "@/client/lib/ranks";
 import { regionName } from "@/server/data/regions";
+import { cn, isOnline, presenceLabel } from "@/client/lib/format";
 
 // Lightweight member profile — opens when you tap any avatar in the chat.
 // Respects the member's privacy settings (what they've chosen to show).
@@ -41,10 +42,15 @@ export function MemberModal({
           <Avatar name={member.name} size={76} className="ring-2 ring-flag-gold" />
           <div className="mt-3 flex items-center gap-2">
             <p className="font-display text-xl font-bold">{member.name}</p>
+            <span
+              className={cn("h-2.5 w-2.5 rounded-full", isOnline(member.lastSeenAt) ? "bg-flag-green" : "bg-fg/20")}
+              title={presenceLabel(member.lastSeenAt)}
+            />
             {member.verified && (
               <BadgeCheck size={18} className="text-flag-green" />
             )}
           </div>
+          <p className="mt-1 text-[11px] font-semibold text-fg/45">{presenceLabel(member.lastSeenAt)}</p>
           <div className="mt-1.5 flex items-center gap-2">
             <RankChip points={member.points} role={member.role} size="md" />
             {member.verified && (

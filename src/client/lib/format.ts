@@ -44,6 +44,22 @@ export function avatarColor(name: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
+// --- Online/offline presence ---
+// A member is "online" if they were active in the last 5 minutes.
+export const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+export function isOnline(lastSeenAt?: string | null): boolean {
+  if (!lastSeenAt) return false;
+  const t = new Date(lastSeenAt).getTime();
+  return Date.now() - t < ONLINE_WINDOW_MS;
+}
+
+export function presenceLabel(lastSeenAt?: string | null): string {
+  if (!lastSeenAt) return "Offline";
+  if (isOnline(lastSeenAt)) return "Online";
+  return `Last seen ${timeAgo(lastSeenAt)}`;
+}
+
 export function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }

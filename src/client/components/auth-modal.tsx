@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MapPin, Loader2, Check, Star, ShieldCheck, RefreshCw, Lock } from "lucide-react";
 import { GHANA_REGIONS } from "@/server/data/regions";
 import { useStore } from "@/client/store";
+import { friendlyError } from "@/client/store";
 import { rpcClient } from "@/client/rpc-client";
 import { useI18n } from "@/client/lib/i18n";
 import { Modal, Button } from "./ui";
@@ -62,10 +63,10 @@ export function AuthModal({
     setBusy(true);
     try {
       const m = await login(email, password);
-      toast(m.emailVerified ? `Welcome back, ${m.name.split(" ")[0]}! 🇬🇭` : "Welcome! Verify your email to finish signing up.");
+      setUser(m);
       onClose();
     } catch (e: any) {
-      toast(e?.message ?? "Sign in failed", "error");
+      toast(friendlyError(e), "error");
     } finally {
       setBusy(false);
     }
@@ -98,7 +99,7 @@ export function AuthModal({
         setStep(3);
         toast("Account created! Check your email for the verification code.");
       } catch (e: any) {
-        toast(e?.message ?? "Sign up failed", "error");
+        toast(friendlyError(e), "error");
       } finally {
         setBusy(false);
       }

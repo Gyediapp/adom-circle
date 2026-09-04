@@ -14,6 +14,24 @@ import type { PublicMember } from "@/server/rpc/members";
 const TOKEN_KEY = "adom_token";
 const MEMBER_KEY = "adom_member_id"; // legacy fallback for old sessions
 
+// Translate raw RPC/network errors into a friendly message. The raw
+// "MALFORMED_ORPC_ERROR_RESPONSE" appears when the server returns an
+// unparseable response — usually a brief restart window during a Railway
+// redeploy. Users should see something reassuring instead of scary internals.
+export function friendlyError(e: unknown): string {
+  const msg = (e as any)?.message ?? "";
+  if (/MALFORMED_ORPC_ERROR_RESPONSE/i.test(msg) || /Cannot parse response/i.test(msg)) {
+    return "Adom Circle is briefly restarting — please try again in a moment.";
+  }
+  if (/Failed to fetch|NetworkError|network error|load failed/i.test(msg)) {
+    return "No connection — check your internet and try again.";
+  }
+  if (/INTERNAL_SERVER_ERROR|Internal server error/i.test(msg)) {
+    return "Something went wrong on our side — please try again in a moment.";
+  }
+  return msg || "Something went wrong. Please try again.";
+}
+
 type Toast = { id: number; msg: string; kind: "success" | "error" };
 
 type SignupInput = {

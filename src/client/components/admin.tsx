@@ -38,7 +38,7 @@ import { Button, Card, Chip, Toggle, Avatar, Modal } from "./ui";
 import { RankChip } from "@/client/lib/ranks";
 import { DeepSeekRateCard, DeepSeekStatusPill } from "./deepseek-card";
 import { captchaConfigured } from "@/client/lib/captcha";
-import { cn, timeAgo } from "@/client/lib/format";
+import { cn, timeAgo, isOnline, presenceLabel } from "@/client/lib/format";
 import { GHANA_REGIONS } from "@/server/data/regions";
 import type { Settings, Post } from "@/server/rpc/site";
 import type { PublicMember } from "@/server/rpc/members";
@@ -834,6 +834,21 @@ function MembersManager() {
                 {m.email} · {GHANA_REGIONS.find((r) => r.id === m.region)?.name ?? m.region}
                 {m.diasporaCountry ? ` · diaspora: ${m.diasporaCountry}` : ""}
               </p>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-fg/45">
+                <span className="inline-flex items-center gap-1">
+                  <CalendarDays size={11} className="text-flag-red" />
+                  Joined {new Date(m.joinedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "h-2 w-2 rounded-full",
+                      isOnline((m as any).lastSeenAt) ? "bg-flag-green" : "bg-fg/25",
+                    )}
+                  />
+                  {presenceLabel((m as any).lastSeenAt)}
+                </span>
+              </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {m.badges.slice(0, 3).map((b) => (
                   <Chip key={b} tone="sand" className="px-2 py-0.5 text-[10px]">{b}</Chip>

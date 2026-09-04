@@ -31,6 +31,7 @@ export const MemberSchema = z.object({
   resetToken: z.string().nullable(),
   resetExpires: z.string().nullable(),
   joinedAt: z.string(),
+  lastSeenAt: z.string().nullable().optional(),
   following: z.array(z.string()),
   followerCount: z.number(),
   savedMessages: z.array(z.string()),
@@ -59,6 +60,7 @@ export function normalizeMember(m: Member): Member {
     status: m.status ?? "active",
     verified: m.verified ?? false,
     merchantName: m.merchantName ?? "",
+    lastSeenAt: m.lastSeenAt ?? null,
     privacy: m.privacy ?? {
       showRegion: true,
       showHometown: true,
@@ -67,6 +69,25 @@ export function normalizeMember(m: Member): Member {
       showPoints: true,
     },
   };
+}
+
+// Record that a member was just active (login, API use, etc.) — powers the
+// online/offline dot. Cheap: one write, throttled naturally by usage.
+export async function touchLastSeen(memberId: string): Promise<void> {
+  if (!memberId) return;
+  try {
+    const raw = await memberKV.getItem(memberId);
+    if (!raw) return;
+    const member = normalizeMember(raw);
+    const now = new Date().toISOString();
+    // Avoid a write every single request — only update if > 60s old
+    if (member.lastSeenAt && now < new Date(new Date(member.lastSeenAt).getTime() + 60_000).toISOString()) {
+      return;
+    }
+    await memberKV.setItem(memberId, { ...member, lastSeenAt: now });
+  } catch {
+    // non-fatal
+  }
 }
 
 // The public face of a member — never exposes password or token material
@@ -133,7 +154,9 @@ export async function memberFromToken(token: string): Promise<Member | null> {
   if (!token) return null;
   const s = await sessionKV.getItem(token);
   if (!s) return null;
-  return memberKV.getItem(s.memberId);
+  const member = await memberKV.getItem(s.memberId);
+  if (member) void touchLastSeen(member.id);
+  return member;
 }
 
 // ---------- Email sending (demo outbox; Resend in production) ----------
@@ -421,6 +444,7 @@ export const members = {
       }
       await clearAttempts(key);
       const token = await createSession(found.id);
+      await touchLastSeen(found.id);
       return { member: sanitizeMember(foundNorm), token };
     }),
 
