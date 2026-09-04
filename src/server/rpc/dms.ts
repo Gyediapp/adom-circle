@@ -72,7 +72,7 @@ export const dms = {
       .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
     const out: Array<
       DMConvo & {
-        other: { id: string; name: string; region: string; points: number; role: string } | null;
+        other: { id: string; name: string; region: string; points: number; role: string; avatarImage: string | null } | null;
         unreadForMe: number;
       }
     > = [];
@@ -88,6 +88,7 @@ export const dms = {
               region: other.region,
               points: other.points,
               role: other.role,
+              avatarImage: other.avatarImage ?? null,
             }
           : null,
         unreadForMe: c.unread[me.id] ?? 0,

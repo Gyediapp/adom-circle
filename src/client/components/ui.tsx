@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { cn, initials, avatarColor } from "@/client/lib/format";
 
@@ -131,22 +132,28 @@ export function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-6">
+    <div className="fixed inset-0 z-[90] flex items-end justify-center sm:p-4">
       <div className="absolute inset-0 bg-ink/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className={cn(
-          "relative z-10 w-full rounded-t-3xl sm:rounded-3xl bg-page shadow-2xl max-h-[92vh] overflow-y-auto animate-fade-up",
+          "relative z-10 flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-page shadow-2xl sm:max-h-[88vh] sm:rounded-3xl animate-fade-up",
           wide ? "sm:max-w-2xl" : "sm:max-w-md",
         )}
       >
+        {/* Grab handle (mobile) — hints the sheet can be dismissed/scrolled */}
+        <div className="flex shrink-0 justify-center pt-2.5 sm:hidden" aria-hidden>
+          <span className="h-1 w-10 rounded-full bg-fg/20" />
+        </div>
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 z-20 rounded-full bg-ink/5 p-2 text-fg/60 hover:bg-ink/10 hover:text-fg transition-colors cursor-pointer"
+          className="absolute right-3 top-3 z-20 rounded-full bg-ink/5 p-2 text-fg/60 hover:bg-ink/10 hover:text-fg transition-colors cursor-pointer"
           aria-label="Close"
         >
           <X size={18} />
         </button>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -163,12 +170,21 @@ export function Avatar({
   className?: string;
   src?: string | null;
 }) {
-  if (src) {
+  // If the photo fails to load (bad data URL, deleted image…), fall back to
+  // the colourful initials block instead of a broken image icon.
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [src]);
+
+  if (src && !broken) {
     return (
       <img
         src={src}
         alt={name}
         title={name}
+        loading="lazy"
+        onError={() => setBroken(true)}
         className={cn("rounded-full object-cover shrink-0", className)}
         style={{ width: size, height: size }}
       />

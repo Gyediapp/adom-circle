@@ -24,22 +24,28 @@ Records at Porkbun for `adomcircle.org`:
 - Railway Custom Domain shows domain verified
 - When adding domains in Railway: NO https:// — just the bare name
 
-## RAILWAY VOLUME — NOT SET UP (important next task)
+## ✅ STORAGE — RAILWAY VOLUME (Supabase PAUSED)
 
-- User found the "Create Volume" screen (right-click service card → Attach Volume → Create Volume)
-- The form shows ONLY a path field
-- Paths `/app/.storage`, `/app/storage`, `/storage`, `app/.storage`, `.storage` all accepted (no red flag) BUT the **Create button stays disabled**
-- No size field, no name field visible; nothing found via Settings either
-- **Possible next approaches for the new chat:**
-  1. Screenshot the actual form and look for hidden size/region requirements
-  2. Try Railway → Settings → left sidebar → Volumes (newer UI)
-  3. Railway docs: volumes may require size in newer UI, or the "More" (⋯) menu on the service
-  4. **Fallback: move data to Supabase (free tier, always-on, no sleep)** — user has Supabase account. Replace `.storage/` file store with Supabase Postgres. Test locally FIRST (small data) before touching live site. Supabase free = 500MB, fine for text data. Railway Hobby stays as the only paid service.
+- **Data persists on a Railway volume.** The app's default backend is file
+  storage writing to `.storage/` (`STORAGE_DIR` env var, default `./.storage`),
+  and on Railway that path is the mounted volume — data now survives redeploys.
+- **Supabase is PAUSED / optional.** `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`
+  are not set in Railway, so `create-kv.ts` stays on the file backend. The
+  Supabase Postgres backend is still fully coded (opt-in by setting both env
+  vars) — nothing else in the app needs to change to switch.
+- Migration tooling exists in code (used when we moved off Supabase):
+  `createFileKVForced()` + `readSupabaseCollectionRaw()` in
+  `src/server/lib/create-kv.ts`, surfaced as an admin storage tool.
+- ⚠️ If the volume is ever re-attached/emptied, seeded demo data returns on
+  next boot (fresh `.storage`) — same behaviour as a first deploy.
 
 ## What is built (all working)
 
 - Landing page (hero, quick-action links at top, socials row, showcase ads, events strip, civic pledge, community teaser, stories, final CTA)
 - Community: 8 chatrooms (live updates via oRPC streaming), forum with threads/replies/likes/reports, delegated moderation (admins + room moderators)
+- Chat polish: decluttered layout, **live room presence** (people currently viewing each room), **per-room max size** set by admins (sending blocked when full, reading always allowed), **voice messages** (record/playback, one-at-a-time, data-saver audio-only mode, master voice on/off), message audio fetched lazily
+- Friends: request → accept flow, **quiet declines** (declined requests never notify or surface as "declined" to the sender — the Add-friend button just disappears), cancel/remove friends
+- Profiles: **profile photo & cover photo uploads** (client resizes/compresses, data-URL stored), presence labels
 - Projects: listing, detail modal, contributions (Time/Skills/Resources/Financial), submit-a-project flow, milestones, impact stats
 - Events & Activities: upcoming/past, RSVP (+15 pts), VIP/moderator/admin can create, showcase ads (click-tracked)
 - Civic: voter pledge (+20 pts), Constitution explainers, election timeline
@@ -51,16 +57,15 @@ Records at Porkbun for `adomcircle.org`:
 - Notifications: bell with unread badge, auto-notify on replies/likes/new events/rank-ups/broadcasts
 - Dark mode (follows system, remembers choice), 4 languages (EN/Twi/Ga/Ewe) via i18n
 - PWA: manifest, service worker, installable, icons (3D "AC" logo)
-- URL routing: hash-based (#/events, #/projects…) so each page has its own address + back button works + error boundary
+- URL routing: path-based (/, /community, /events, #/legacy-hash links also handled) so each page has its own clean address + back/forward buttons work + error boundary + route-aware SEO meta per page
 
 ## NEXT PRIORITIES
 
-1. **DATA VOLUME / PERSISTENCE** (above) — top priority; data currently resets on redeploy
-2. **DESIGN & TEXT POLISH** — user's stated next want: "polish the design and text etc" now that everything works. Premium $100k look, Ghana flag colors, unique branding
-3. **Real email delivery** — currently demo mailbox (Admin → Mailbox shows codes). Wire Resend/SMTP into `src/server/rpc/members.ts` (sendEmail function)
-4. **reCAPTCHA keys** — hook ready, demo mode now. Add `VITE_RECAPTCHA_SITE_KEY` (build-time) + `RECAPTCHA_SECRET_KEY`
-5. **Social links** — user has FB page/group, WhatsApp channel, YouTube, TikTok. Update in Admin → Site content → socials (currently placeholder URLs)
-6. **Cloudinary** — image hosting on free tier; image fields accept custom URLs already
+1. **DESIGN & TEXT POLISH** — user's stated next want: "polish the design and text etc" now that everything works. Premium $100k look, Ghana flag colors, unique branding
+2. **Real email delivery** — currently demo mailbox (Admin → Mailbox shows codes). Wire Resend/SMTP into `src/server/rpc/members.ts` (sendEmail function)
+3. **reCAPTCHA keys** — hook ready, demo mode now. Add `VITE_RECAPTCHA_SITE_KEY` (build-time) + `RECAPTCHA_SECRET_KEY`
+4. **Social links** — user has FB page/group, WhatsApp channel, YouTube, TikTok. Update in Admin → Site content → socials (currently placeholder URLs)
+5. **Cloudinary** — image hosting on free tier; image fields accept custom URLs already
 
 ## THE UPLOAD PROCESS (how updates reach the live site)
 
@@ -85,7 +90,7 @@ Records at Porkbun for `adomcircle.org`:
 - Real email provider (Resend/SMTP) — currently demo mailbox in Admin → Mailbox
 - `VITE_API_URL` — only if frontend ever splits from API
 - Railway sets `PORT` automatically (8080); server reads `process.env.PORT` (Dockerfile EXPOSE 3000 is just a label)
-- Supabase (future): `SUPABASE_URL` + `SUPABASE_ANON_KEY` from Supabase → Project Settings → API
+- Supabase (optional, currently paused): `SUPABASE_URL` (bare base URL — no `/rest/v1/` suffix) + `SUPABASE_SERVICE_ROLE_KEY` (service-role "Secret" key, server-side only) switch storage back to Postgres
 
 ## Demo accounts (all password: `Adom@2026`)
 

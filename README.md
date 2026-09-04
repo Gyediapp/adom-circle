@@ -2,7 +2,7 @@
 
 **Ghana's circle of values, civic duty & progress.** A civic and social platform uniting Ghanaians at home and abroad — under one Constitution, above every institution.
 
-Live at **[adomcircle.org](https://adomcircle.org)** — deployed on Railway, data persisted in Supabase Postgres.
+Live at **[adomcircle.org](https://adomcircle.org)** — deployed on Railway, data persisted on a Railway volume (`.storage/` file backend; Supabase Postgres optional and currently paused).
 
 ## What's inside
 

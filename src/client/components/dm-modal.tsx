@@ -161,7 +161,7 @@ export function DmModal({
                     convoId === c.id && "bg-soft",
                   )}
                 >
-                  <Avatar name={c.other?.name ?? "?"} size={40} />
+                  <Avatar name={c.other?.name ?? "?"} size={40} src={c.other?.avatarImage} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-bold">{c.other?.name}</p>
@@ -196,7 +196,11 @@ export function DmModal({
                       const mine = m.fromId === me.id;
                       return (
                         <div key={m.id} className={cn("flex gap-3", mine && "flex-row-reverse")}>
-                          <Avatar name={mine ? me.name : activeConvo?.other?.name ?? "?"} size={32} />
+                          <Avatar
+                            name={mine ? me.name : activeConvo?.other?.name ?? "?"}
+                            size={32}
+                            src={mine ? me.avatarImage : activeConvo?.other?.avatarImage}
+                          />
                           <div className={cn("max-w-[78%]", mine && "text-right")}>
                             <div className={cn("mb-1 flex items-center gap-2", mine && "justify-end")}>
                               <span className="text-[12px] font-bold">

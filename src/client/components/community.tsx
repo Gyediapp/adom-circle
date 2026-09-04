@@ -39,7 +39,12 @@ import { ShareModal, type ShareTarget } from "./share-modal";
 import { MemberModal } from "./member-modal";
 import { BarChart3, Kanban, SmilePlus, ChevronDown, ChevronUp, Volume2, VolumeX } from "lucide-react";
 
-type ChatMsg = Message & { authorPoints: number; authorRole: string; hasAudio: boolean };
+type ChatMsg = Message & {
+  authorPoints: number;
+  authorRole: string;
+  authorAvatar?: string | null;
+  hasAudio: boolean;
+};
 
 const REACTIONS: Array<{ type: ReactionType; emoji: string; label: string }> = [
   { type: "like", emoji: "👍", label: "Like" },
@@ -89,7 +94,7 @@ export function Community() {
   const pendingRef = useRef(pendingMsgs);
   pendingRef.current = pendingMsgs;
   // Cache of author metadata (verified badge) by member id
-  const authorsById = useRef(new Map<string, { verified?: boolean; merchantName?: string }>());
+  const authorsById = useRef(new Map<string, { verified?: boolean; merchantName?: string; avatarImage?: string | null }>());
   // Anonymous posting (Health & Welfare)
   const [anonymous, setAnonymous] = useState(false);
   // Audio-only mode toggle (General)
@@ -191,7 +196,12 @@ export function Community() {
       rpcClient.members
         .byId(id)
         .then((m) => {
-          if (m) authorsById.current.set(id, { verified: m.verified, merchantName: m.merchantName });
+          if (m)
+            authorsById.current.set(id, {
+              verified: m.verified,
+              merchantName: m.merchantName,
+              avatarImage: m.avatarImage ?? null,
+            });
         })
         .catch(() => {});
     }
@@ -532,7 +542,7 @@ export function Community() {
     const server = (messages ?? []).filter((m) => !m.deleted); // hide deleted entirely
     const pendingIds = new Set(pendingMsgs.map((p) => p.id));
     const serverIds = new Set(server.map((m) => m.id));
-    const merged = [...server];
+    const merged: ChatMsg[] = [...(server as ChatMsg[])];
     for (const p of pendingMsgs) {
       if (!serverIds.has(p.id)) merged.push(p as ChatMsg);
     }
@@ -1049,9 +1059,15 @@ export function Community() {
                   const authorInfo =
                     m.authorId !== "anonymous"
                       ? (authorsById.current?.get(m.authorId) as
-                          | { verified?: boolean; merchantName?: string }
+                          | { verified?: boolean; merchantName?: string; avatarImage?: string | null }
                           | undefined)
                       : undefined;
+                  const authorAvatar = m.anonymous
+                    ? null
+                    : (m.authorAvatar ??
+                      (m.authorId === me?.id
+                        ? (me.avatarImage ?? null)
+                        : (authorInfo?.avatarImage ?? null)));
                   const pendingCopy = pendingMsgs.find((p) => p.id === m.id);
                   const replies = chatGroups.repliesByParent.get(m.id) ?? [];
                   return (
@@ -1068,6 +1084,7 @@ export function Community() {
                             (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
                         }
                         verified={Boolean(authorInfo?.verified)}
+                        avatarImage={authorAvatar}
                         audioEnabled={audioEnabled}
                         onReact={(type) => me && react.mutate({ memberId: me.id, messageId: m.id, type })}
                         onReply={() => {
@@ -1108,9 +1125,15 @@ export function Community() {
                             const rInfo =
                               r.authorId !== "anonymous"
                                 ? (authorsById.current?.get(r.authorId) as
-                                    | { verified?: boolean; merchantName?: string }
+                                    | { verified?: boolean; merchantName?: string; avatarImage?: string | null }
                                     | undefined)
                                 : undefined;
+                            const rAvatar = r.anonymous
+                              ? null
+                              : (r.authorAvatar ??
+                                (r.authorId === me?.id
+                                  ? (me.avatarImage ?? null)
+                                  : (rInfo?.avatarImage ?? null)));
                             const rPending = pendingMsgs.find((p) => p.id === r.id);
                             const rParentName = r.replyToId ? msgById.get(r.replyToId)?.authorName ?? null : null;
                             return (
@@ -1127,6 +1150,7 @@ export function Community() {
                                     (me.role === "moderator" && me.managedRooms.includes(activeRoom.id)))
                                 }
                                 verified={Boolean(rInfo?.verified)}
+                                avatarImage={rAvatar}
                                 audioEnabled={audioEnabled}
                                 onReact={(type) => me && react.mutate({ memberId: me.id, messageId: r.id, type })}
                                 onReply={() => {
@@ -1324,6 +1348,7 @@ export function Community() {
                   authorName={t.authorName}
                   authorPoints={(t as any).authorPoints ?? 0}
                   authorRole={(t as any).authorRole ?? "member"}
+                  authorAvatar={(t as any).authorAvatar ?? null}
                   createdAt={t.createdAt}
                   likes={t.likes}
                   replyCount={t.replyCount}
@@ -1679,6 +1704,7 @@ function ChatMessage({
   onReport,
   onRetry,
   verified,
+  avatarImage,
   onProfile,
   audioEnabled,
 }: {
@@ -1705,6 +1731,7 @@ function ChatMessage({
   onReport: () => void;
   onRetry?: () => void;
   verified?: boolean;
+  avatarImage?: string | null;
   onProfile: () => void;
   audioEnabled: boolean;
 }) {
@@ -1743,7 +1770,7 @@ function ChatMessage({
             className="relative shrink-0 cursor-pointer rounded-full transition-opacity hover:opacity-80"
             title="View profile"
           >
-            <Avatar name={displayName} size={32} />
+            <Avatar name={displayName} size={32} src={m.anonymous ? null : avatarImage} />
             {verified && (
               <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-flag-green text-cream ring-2 ring-card">
                 <CheckCircle2 size={8} />
@@ -2073,6 +2100,7 @@ function ForumThread({
   authorName,
   authorPoints,
   authorRole,
+  authorAvatar,
   createdAt,
   likes,
   replyCount,
@@ -2095,6 +2123,7 @@ function ForumThread({
   authorName: string;
   authorPoints: number;
   authorRole: string;
+  authorAvatar?: string | null;
   createdAt: string;
   likes: number;
   replyCount: number;
@@ -2131,7 +2160,7 @@ function ForumThread({
     <Card className="overflow-hidden">
       <div className="p-6">
         <div className="mb-3 flex items-center gap-3 flex-wrap">
-          <Avatar name={authorName} size={38} />
+          <Avatar name={authorName} size={38} src={authorAvatar} />
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-bold">{authorName}</p>
@@ -2250,7 +2279,7 @@ function ForumThread({
               if (r.deleted) {
                 return (
                   <div key={r.id} className="flex gap-3">
-                    <Avatar name={r.authorName} size={30} />
+                    <Avatar name={r.authorName} size={30} src={(r as any).authorAvatar ?? null} />
                     <div className="rounded-2xl bg-soft/60 border border-dashed border-fg/15 px-4 py-2.5 text-[13px] italic text-fg/40">
                       This reply was deleted
                     </div>
@@ -2259,7 +2288,7 @@ function ForumThread({
               }
               return (
                 <div key={r.id} className="flex gap-3">
-                  <Avatar name={r.authorName} size={30} />
+                  <Avatar name={r.authorName} size={30} src={(r as any).authorAvatar ?? null} />
                   <div className="flex-1">
                     <div className="rounded-2xl bg-card px-4 py-2.5 text-sm border border-fg/5">
                       <p className="text-[12px] font-bold">

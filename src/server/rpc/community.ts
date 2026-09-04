@@ -232,18 +232,20 @@ const getMessages = os
     return withAuthorInfo(msgs);
   });
 
-// Attach live rank info (points + role) to any author-referencing item
-async function withAuthorInfo<T extends { authorId: string }>(items: T[]): Promise<Array<T & { authorPoints: number; authorRole: string }>> {
-  const cache = new Map<string, { points: number; role: string }>();
-  const out: Array<T & { authorPoints: number; authorRole: string }> = [];
+// Attach live author info (points + role + avatar) to any author-referencing item
+async function withAuthorInfo<T extends { authorId: string }>(items: T[]): Promise<Array<T & { authorPoints: number; authorRole: string; authorAvatar: string | null }>> {
+  const cache = new Map<string, { points: number; role: string; avatar: string | null }>();
+  const out: Array<T & { authorPoints: number; authorRole: string; authorAvatar: string | null }> = [];
   for (const item of items) {
     let info = cache.get(item.authorId);
     if (!info) {
       const m = await memberKV.getItem(item.authorId);
-      info = m ? { points: m.points, role: m.role } : { points: 0, role: "member" };
+      info = m
+        ? { points: m.points, role: m.role, avatar: m.avatarImage ?? null }
+        : { points: 0, role: "member", avatar: null };
       cache.set(item.authorId, info);
     }
-    out.push({ ...item, authorPoints: info.points, authorRole: info.role });
+    out.push({ ...item, authorPoints: info.points, authorRole: info.role, authorAvatar: info.avatar });
   }
   return out;
 }
