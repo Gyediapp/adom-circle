@@ -621,9 +621,13 @@ export const members = {
     return m ? sanitizeMember(normalizeMember(m)) : null;
   }),
 
+  // Full member search — ADMIN ONLY. Regular members have no way to browse or
+  // hunt for people on the site (privacy); the only name look-up members get is
+  // the @mention picker (mentionSearch, scoped below).
   search: os
-    .input(z.object({ q: z.string().min(1).max(50) }))
+    .input(z.object({ adminId: z.string(), q: z.string().min(1).max(50) }))
     .handler(async ({ input }) => {
+      await requireAdmin(input.adminId);
       const q = input.q.toLowerCase();
       const all = await memberKV.getAllItems();
       return all
@@ -631,6 +635,47 @@ export const members = {
         .slice(0, 8)
         .map((m) => ({ id: m.id, name: m.name }));
     }),
+
+  // Name-only lookup for the @mention picker in chat. Signed-in members can
+  // find people to tag, but get back nothing but id + name.
+  mentionSearch: os
+    .input(z.object({ memberId: z.string(), q: z.string().min(1).max(50) }))
+    .handler(async ({ input }) => {
+      await requireMember(input.memberId);
+      const q = input.q.toLowerCase();
+      const all = await memberKV.getAllItems();
+      return all
+        .filter((m) => m.status !== "suspended" && m.name.toLowerCase().includes(q))
+        .slice(0, 8)
+        .map((m) => ({ id: m.id, name: m.name }));
+    }),
+
+  // Public "Meet the circle" directory — powers the rolling avatar strip on
+  // the landing page. Deliberately minimal: no email/phone/points, respects
+  // each member's privacy switches, and is capped so it stays light.
+  directory: os.handler(async () => {
+    const all = await memberKV.getAllItems();
+    const now = Date.now();
+    const ONLINE_MS = 5 * 60 * 1000;
+    return all
+      .filter((m) => m.status !== "suspended")
+      .map((m) => normalizeMember(m))
+      .map((m) => ({
+        id: m.id,
+        name: m.name,
+        avatarImage: m.avatarImage ?? null,
+        role: m.role,
+        points: m.points,
+        online: !!m.lastSeenAt && now - new Date(m.lastSeenAt).getTime() < ONLINE_MS,
+        region: m.privacy?.showRegion === false ? null : (m.region || null),
+        hometown: m.privacy?.showHometown === false ? null : (m.hometown || null),
+        diasporaCountry: m.diasporaCountry || null,
+        church: m.church || null,
+        lastSeenAt: m.lastSeenAt ?? null,
+      }))
+      .sort((a, b) => Number(b.online) - Number(a.online) || b.points - a.points || a.name.localeCompare(b.name))
+      .slice(0, 40);
+  }),
 
   follow: os
     .input(z.object({ memberId: z.string(), targetId: z.string() }))

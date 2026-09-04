@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Menu, X, LayoutDashboard, LogOut, Sun, Moon, Globe, Check, MessagesSquare } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Menu, X, LayoutDashboard, LogOut, Sun, Moon, MessagesSquare } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Logo, LogoMark } from "@/client/lib/logo";
 import { useStore } from "@/client/store";
@@ -7,7 +7,7 @@ import { Avatar, Button, Chip } from "./ui";
 import { ProfileModal } from "./profile";
 import { NotificationBell } from "./notifications";
 import { DmModal } from "./dm-modal";
-import { LANGS, useI18n } from "@/client/lib/i18n";
+import { useI18n } from "@/client/lib/i18n";
 import { cn } from "@/client/lib/format";
 import { queryClient } from "@/client/rpc-client";
 
@@ -45,11 +45,10 @@ export function Navbar({
   overDark?: boolean;
 }) {
   const { user, logout } = useStore();
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [langOpen, setLangOpen] = useState(false);
   const [dmOpen, setDmOpen] = useState(false);
   // Default follows the visitor's device preference; a manual toggle wins and is remembered
   const [dark, setDark] = useState(() => {
@@ -57,7 +56,6 @@ export function Navbar({
     if (saved) return saved === "dark";
     return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   });
-  const langRef = useRef<HTMLDivElement>(null);
 
   const solid = scrolled || open || !overDark;
 
@@ -71,16 +69,6 @@ export function Navbar({
     onScroll();
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (langRef.current && !langRef.current.contains(e.target as Node)) {
-        setLangOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
   const { data: dmUnread } = useQuery(
@@ -160,41 +148,6 @@ export function Navbar({
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-
-          {/* Language switcher */}
-          <div className="relative hidden sm:block" ref={langRef}>
-            <button
-              onClick={() => setLangOpen(!langOpen)}
-              className={cn(
-                "rounded-full p-2.5 transition-colors cursor-pointer",
-                solid ? "text-fg/70 hover:text-fg hover:bg-ink/5" : "text-cream/80 hover:text-cream hover:bg-white/10",
-              )}
-              aria-label="Language"
-              title="Language"
-            >
-              <Globe size={18} />
-            </button>
-            {langOpen && (
-              <div className="absolute right-0 top-12 z-[70] w-44 overflow-hidden rounded-2xl border border-fg/10 bg-card shadow-2xl animate-fade-up">
-                {LANGS.map((l) => (
-                  <button
-                    key={l.code}
-                    onClick={() => {
-                      setLang(l.code);
-                      setLangOpen(false);
-                    }}
-                    className={cn(
-                      "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer",
-                      lang === l.code ? "bg-flag-gold/15 text-flag-red" : "text-fg/70 hover:bg-soft",
-                    )}
-                  >
-                    <span>{l.native}</span>
-                    {lang === l.code && <Check size={14} />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
           {user && (
             <button
@@ -306,7 +259,7 @@ export function Navbar({
             {user ? (
               <div className="mt-2 flex items-center justify-between rounded-xl bg-soft px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <Avatar name={user.name} size={36} />
+                  <Avatar name={user.name} size={36} src={user.avatarImage} />
                   <div>
                     <p className="text-sm font-bold">{user.name}</p>
                     <Chip tone="green" className="mt-0.5 capitalize">{user.role}</Chip>
@@ -332,42 +285,14 @@ export function Navbar({
                 </Button>
               </div>
             )}
-            <div className="mt-3 flex items-center gap-2 border-t border-fg/10 pt-3">
+            <div className="mt-3 border-t border-fg/10 pt-3">
               <button
                 onClick={() => setDark(!dark)}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-soft px-3 py-2.5 text-sm font-semibold text-fg/70 cursor-pointer"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-soft px-3 py-2.5 text-sm font-semibold text-fg/70 cursor-pointer"
               >
                 {dark ? <Sun size={15} /> : <Moon size={15} />}
                 {dark ? "Light mode" : "Dark mode"}
               </button>
-              <div className="relative flex-1" ref={langRef}>
-                <button
-                  onClick={() => setLangOpen(!langOpen)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-soft px-3 py-2.5 text-sm font-semibold text-fg/70 cursor-pointer"
-                >
-                  <Globe size={15} /> {LANGS.find((l) => l.code === lang)?.native ?? "Language"}
-                </button>
-                {langOpen && (
-                  <div className="absolute bottom-full left-0 z-[70] mb-1 w-full overflow-hidden rounded-2xl border border-fg/10 bg-card shadow-2xl animate-fade-up">
-                    {LANGS.map((l) => (
-                      <button
-                        key={l.code}
-                        onClick={() => {
-                          setLang(l.code);
-                          setLangOpen(false);
-                        }}
-                        className={cn(
-                          "flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold transition-colors cursor-pointer",
-                          lang === l.code ? "bg-flag-gold/15 text-flag-red" : "text-fg/70 hover:bg-soft",
-                        )}
-                      >
-                        <span>{l.native}</span>
-                        {lang === l.code && <Check size={14} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>

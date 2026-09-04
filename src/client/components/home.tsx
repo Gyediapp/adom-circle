@@ -26,12 +26,14 @@ import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { useI18n } from "@/client/lib/i18n";
 import { SocialLinks } from "./socials";
-import { Button, Card, Chip, Modal, SectionHeading, Stat, ProgressBar } from "./ui";
+import { Avatar, Button, Card, Chip, Modal, SectionHeading, Stat, ProgressBar } from "./ui";
+import { MemberModal } from "./member-modal";
 import { FacebookIcon, WhatsAppIcon, YouTubeIcon, TikTokIcon } from "@/client/lib/brand-icons";
 import { LogoMark, Star } from "@/client/lib/logo";
 import { GHANA_REGIONS, regionName, type GhanaRegion } from "@/server/data/regions";
 import { formatNumber, timeAgo, cn } from "@/client/lib/format";
 import type { Tab } from "./navbar";
+import type { PublicMember } from "@/server/rpc/members";
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
   Education: <Sparkles size={18} />,
@@ -104,6 +106,12 @@ export function Home({
   const { data: events } = useQuery(queryClient.events.list.queryOptions());
   const { data: threads } = useQuery(
     queryClient.community.liveThreads.list.experimental_liveOptions(),
+  );
+  // "Meet the circle" — public member strip (avatars + online status)
+  const { data: directory } = useQuery(
+    queryClient.members.directory.queryOptions({
+      refetchInterval: 30_000,
+    }),
   );
 
   const stats = settings?.stats;
@@ -332,6 +340,11 @@ export function Home({
         </div>
         <div className="flag-stripes h-[3px] w-full" aria-hidden />
       </div>
+
+      {/* ================= MEET THE CIRCLE (member strip) ================= */}
+      {directory && directory.length > 0 && (
+        <MembersMarquee members={directory} user={user} onAuth={onAuth} />
+      )}
 
       {/* ================= TABLE OF CONTENTS ================= */}
       <div className="sticky top-[96px] z-30 border-b border-fg/5 bg-page/90 backdrop-blur-xl">
@@ -1160,4 +1173,171 @@ function ValueIcon({ icon }: { icon: string }) {
     vote: <Star size={22} />,
   };
   return map[icon] ?? <Star size={22} />;
+}
+
+/* ------------------------------------------------------------------ */
+/* Meet the Circle — a slow rolling strip of member avatars shown on   */
+/* the landing page (visible to visitors before they join). Each shows */
+/* online/offline; tapping opens a small, privacy-light card with only */
+/* where they are (region/diaspora), denomination (if given) + status. */
+/* ------------------------------------------------------------------ */
+
+type DirEntry = Awaited<ReturnType<typeof rpcClient.members.directory>>[number];
+
+function MembersMarquee({
+  members,
+  user,
+  onAuth,
+}: {
+  members: DirEntry[];
+  user: PublicMember | null;
+  onAuth: (m: "login" | "signup") => void;
+}) {
+  const [peek, setPeek] = useState<DirEntry | null>(null);
+  const [fullId, setFullId] = useState<string | null>(null);
+
+  const open = (m: DirEntry) => setPeek(m);
+
+  const showOnline = members.filter((m) => m.online).length;
+
+  return (
+    <section className="relative overflow-hidden bg-ink py-16 text-cream sm:py-20">
+      <div className="hero-grid absolute inset-0 opacity-40" aria-hidden />
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-5">
+          <div className="max-w-xl">
+            <p className="mb-3 inline-flex items-center gap-2.5 text-xs font-bold uppercase tracking-[0.25em] text-flag-gold">
+              <span className="flag-stripes h-[3px] w-10 rounded-full" aria-hidden />
+              The community
+            </p>
+            <h2 className="font-display text-3xl font-bold leading-tight sm:text-4xl">
+              Meet the Circle
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-cream/60">
+              Real Ghanaians at home and in the diaspora — contributing to peace, projects and
+              progress. Tap an avatar to see where they're from.
+            </p>
+          </div>
+          <div className="flex items-center gap-4 rounded-2xl border border-cream/10 bg-cream/5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-cream/55">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-flag-green ring-2 ring-flag-green/25" />
+              {showOnline} online
+            </span>
+            <span className="h-3 w-px bg-cream/15" />
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-cream/25" />
+              Offline
+            </span>
+          </div>
+        </div>
+
+        {/* Rolling strip — two copies of the list for a seamless loop; hover pauses */}
+        <div className="group relative mt-10 overflow-hidden">
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-ink to-transparent sm:w-24"
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-ink to-transparent sm:w-24"
+            aria-hidden
+          />
+          <div className="flex w-max animate-marquee gap-4 pr-4 group-hover:[animation-play-state:paused] sm:gap-5">
+            {[0, 1].map((copy) => (
+              <div key={copy} aria-hidden={copy === 1} className="flex gap-4 sm:gap-5">
+                {members.map((m) => (
+                  <button
+                    key={`${m.id}-${copy}`}
+                    onClick={() => open(m)}
+                    className="group/av w-16 shrink-0 cursor-pointer text-center"
+                    title={`${m.name} — ${m.online ? "Online" : "Offline"}`}
+                  >
+                    <span className="relative mx-auto block h-14 w-14 sm:h-16 sm:w-16">
+                      <Avatar
+                        name={m.name}
+                        size={60}
+                        src={m.avatarImage}
+                        className="ring-2 ring-cream/15 transition-all duration-200 group-hover/av:ring-flag-gold group-hover/av:shadow-glow-gold"
+                      />
+                      <span
+                        className={cn(
+                          "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-ink",
+                          m.online ? "bg-flag-green" : "bg-cream/25",
+                        )}
+                        aria-hidden
+                      />
+                    </span>
+                    <span className="mt-1.5 block truncate text-[10px] font-semibold text-cream/55 group-hover/av:text-cream">
+                      {m.name.split(" ")[0]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Peek — minimal, privacy-light details (region/diaspora, denomination, status) */}
+      {peek && (
+        <Modal open onClose={() => setPeek(null)}>
+          <div className="p-6 text-center sm:p-8">
+            <Avatar name={peek.name} size={76} className="mx-auto ring-4 ring-flag-gold" src={peek.avatarImage} />
+            <p className="mt-3 font-display text-xl font-bold">{peek.name}</p>
+            <p className={cn("mt-1 inline-flex items-center gap-1.5 text-[12px] font-bold", peek.online ? "text-flag-green" : "text-fg/45")}>
+              <span className={cn("h-2 w-2 rounded-full", peek.online ? "bg-flag-green" : "bg-fg/25")} />
+              {peek.online ? "Online now" : peek.lastSeenAt ? `Last seen ${timeAgo(peek.lastSeenAt)}` : "Offline"}
+            </p>
+
+            {(peek.region || peek.diasporaCountry || peek.church) && (
+              <div className="mt-5 space-y-2 text-left">
+                {peek.region && (
+                  <div className="flex items-center gap-2.5 rounded-xl bg-soft/60 px-3.5 py-2.5">
+                    <MapPin size={14} className="shrink-0 text-flag-red" />
+                    <span className="text-[12px] font-bold uppercase tracking-wider text-fg/45">Region</span>
+                    <span className="ml-auto text-[13px] font-semibold text-fg/85">{regionName(peek.region)}</span>
+                  </div>
+                )}
+                {peek.diasporaCountry && (
+                  <div className="flex items-center gap-2.5 rounded-xl bg-soft/60 px-3.5 py-2.5">
+                    <span className="shrink-0 text-[13px]">📍</span>
+                    <span className="text-[12px] font-bold uppercase tracking-wider text-fg/45">Diaspora</span>
+                    <span className="ml-auto text-[13px] font-semibold text-fg/85">{peek.diasporaCountry}</span>
+                  </div>
+                )}
+                {peek.church && (
+                  <div className="flex items-center gap-2.5 rounded-xl bg-soft/60 px-3.5 py-2.5">
+                    <span className="shrink-0 text-[13px]">⛪</span>
+                    <span className="text-[12px] font-bold uppercase tracking-wider text-fg/45">Denomination</span>
+                    <span className="ml-auto text-[13px] font-semibold text-fg/85">{peek.church}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-6 space-y-2">
+              {!user ? (
+                <>
+                  <Button variant="gold" className="w-full" onClick={() => { setPeek(null); onAuth("signup"); }}>
+                    Join the circle 🇬🇭
+                  </Button>
+                  <Button variant="ghost" className="w-full text-fg/50" onClick={() => { setPeek(null); onAuth("login"); }}>
+                    Already a member? Sign in
+                  </Button>
+                </>
+              ) : peek.id === user.id ? (
+                <p className="text-[12px] font-semibold text-fg/45">This is you — the circle sees you here 🟢</p>
+              ) : (
+                <Button variant="dark" className="w-full" onClick={() => { setFullId(peek.id); setPeek(null); }}>
+                  View full profile <ArrowRight size={15} />
+                </Button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Full member profile (logged-in visitors) */}
+      <MemberModal memberId={fullId} open={!!fullId} onClose={() => setFullId(null)} />
+    </section>
+  );
 }

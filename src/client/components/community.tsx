@@ -132,19 +132,22 @@ export function Community() {
   const [audioData, setAudioData] = useState<string | null>(null);
   const chatScroll = useRef<HTMLDivElement>(null);
 
-  // Debounced member search for the @mention dropdown
+  // Debounced member search for the @mention dropdown — name-only, signed-in
+  // members only (full member search is admin-only).
   useEffect(() => {
-    if (!mentionQuery) {
+    const uid = requireUser()?.id;
+    if (!mentionQuery || !uid) {
       setMentionResults([]);
       return;
     }
     const t = setTimeout(() => {
       rpcClient.members
-        .search({ q: mentionQuery })
+        .mentionSearch({ memberId: uid, q: mentionQuery })
         .then(setMentionResults)
         .catch(() => setMentionResults([]));
     }, 200);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mentionQuery]);
 
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
