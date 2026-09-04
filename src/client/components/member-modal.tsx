@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import { MapPin, Briefcase, Church, Award, Trophy, BadgeCheck, UserPlus, UserCheck, MessageCircle, CalendarDays } from "lucide-react";
-import { queryClient } from "@/client/rpc-client";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { MapPin, Briefcase, Church, Award, Trophy, BadgeCheck, UserPlus, UserCheck, MessageCircle, CalendarDays, Check, X, Clock } from "lucide-react";
+import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { Modal, Avatar, Button, Chip } from "./ui";
 import { RankChip } from "@/client/lib/ranks";
@@ -9,20 +10,22 @@ import { cn, isOnline, presenceLabel } from "@/client/lib/format";
 
 // Lightweight member profile — opens when you tap any avatar in the chat.
 // Respects the member's privacy settings (what they've chosen to show).
+// Friendship is mutual: you send a request, they accept, then you're friends.
 export function MemberModal({
   memberId,
   open,
   onClose,
-  onFollow,
   onDm,
 }: {
   memberId: string | null;
   open: boolean;
   onClose: () => void;
-  onFollow?: () => void;
   onDm?: () => void;
 }) {
-  const { user, toast } = useStore();
+  const { user, toast, refresh } = useStore();
+  const qc = useQueryClient();
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
   const { data: member } = useQuery(
     queryClient.members.byId.queryOptions({
       input: memberId ?? "",
@@ -30,10 +33,36 @@ export function MemberModal({
     }),
   );
 
+  const isMe = member?.id === user?.id;
+  const { data: reqs } = useQuery(
+    queryClient.members.friendRequests.queryOptions({
+      input: { memberId: user?.id ?? "" },
+      enabled: open && !!member && !!user && !isMe,
+    }),
+  );
+
+  // Relationship state with the person in the modal
+  const isFriend = !!member && (user?.friends ?? []).includes(member.id);
+  const incomingReq = reqs?.incoming.find((r) => r.fromId === member?.id);
+  const outgoingReq = reqs?.outgoing.find((r) => r.toId === member?.id);
+
+  const refreshAll = async () => {
+    qc.invalidateQueries({ queryKey: ["members"] });
+    await refresh();
+  };
+
+  const act = async (fn: () => Promise<unknown>, msg: string) => {
+    try {
+      await fn();
+      toast(msg);
+      await refreshAll();
+    } catch (e: any) {
+      toast(e?.message ?? "Failed", "error");
+    }
+  };
+
   if (!open || !member) return null;
-  const isMe = member.id === user?.id;
   const p = member.privacy ?? { showRegion: true, showHometown: true, showProfession: true, showBadges: true, showPoints: true };
-  const following = user?.following?.includes(member.id) ?? false;
 
   return (
     <Modal open={open} onClose={onClose}>
@@ -46,9 +75,7 @@ export function MemberModal({
               className={cn("h-2.5 w-2.5 rounded-full", isOnline(member.lastSeenAt) ? "bg-flag-green" : "bg-fg/20")}
               title={presenceLabel(member.lastSeenAt)}
             />
-            {member.verified && (
-              <BadgeCheck size={18} className="text-flag-green" />
-            )}
+            {member.verified && <BadgeCheck size={18} className="text-flag-green" />}
           </div>
           <p className="mt-1 text-[11px] font-semibold text-fg/45">{presenceLabel(member.lastSeenAt)}</p>
           <div className="mt-1.5 flex items-center gap-2">
@@ -59,6 +86,11 @@ export function MemberModal({
               </Chip>
             )}
           </div>
+          {!isMe && (
+            <p className="mt-1.5 text-[11px] font-semibold text-fg/45">
+              {(member.friends ?? []).length} friends
+            </p>
+          )}
           {member.bio && <p className="mt-3 max-w-xs text-[13px] leading-relaxed text-fg/60">{member.bio}</p>}
           <p className="mt-2 text-[11px] font-semibold text-fg/40">
             Member since {new Date(member.joinedAt).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
@@ -99,16 +131,95 @@ export function MemberModal({
           )}
         </div>
 
+        {/* Actions — friendship is mutual (request → accept) */}
         {!isMe && (
-          <div className="mt-6 grid grid-cols-2 gap-2">
-            <Button
-              variant={following ? "outline" : "gold"}
-              onClick={onFollow}
-              className="w-full"
-            >
-              {following ? <UserCheck size={15} /> : <UserPlus size={15} />}
-              {following ? "Following" : "Follow"}
-            </Button>
+          <div className="mt-6 space-y-2">
+            {isFriend ? (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  if (!confirmRemove) {
+                    setConfirmRemove(true);
+                    setTimeout(() => setConfirmRemove(false), 3000);
+                    return;
+                  }
+                  setConfirmRemove(false);
+                  act(
+                    () => rpcClient.members.removeFriend({ memberId: user!.id, friendId: member.id }),
+                    "Friend removed",
+                  );
+                }}
+              >
+                {confirmRemove ? (
+                  <>
+                    <X size={15} /> Tap again to remove friend
+                  </>
+                ) : (
+                  <>
+                    <UserCheck size={15} className="text-flag-green" /> Friends
+                  </>
+                )}
+              </Button>
+            ) : incomingReq ? (
+              <>
+                <Button
+                  variant="gold"
+                  className="w-full"
+                  onClick={() =>
+                    act(
+                      () => rpcClient.members.respondFriendRequest({ memberId: user!.id, requestId: incomingReq.id, accept: true }),
+                      `${member.name} is now your friend 🎉`,
+                    )
+                  }
+                >
+                  <Check size={15} /> Accept friend request
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-fg/50"
+                  onClick={() =>
+                    act(
+                      () => rpcClient.members.respondFriendRequest({ memberId: user!.id, requestId: incomingReq.id, accept: false }),
+                      "Request declined",
+                    )
+                  }
+                >
+                  <X size={15} /> Decline
+                </Button>
+              </>
+            ) : outgoingReq ? (
+              <div className="space-y-2">
+                <Button variant="outline" className="w-full" disabled>
+                  <Clock size={15} /> Request sent — waiting for {member.name.split(" ")[0]}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-fg/50"
+                  onClick={() =>
+                    act(
+                      () => rpcClient.members.cancelFriendRequest({ memberId: user!.id, requestId: outgoingReq.id }),
+                      "Request cancelled",
+                    )
+                  }
+                >
+                  <X size={15} /> Cancel request
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="gold"
+                className="w-full"
+                onClick={() =>
+                  act(
+                    () => rpcClient.members.sendFriendRequest({ memberId: user!.id, targetId: member.id }),
+                    `Friend request sent to ${member.name.split(" ")[0]} 🤝`,
+                  )
+                }
+              >
+                <UserPlus size={15} /> Add friend
+              </Button>
+            )}
             <Button variant="dark" className="w-full" onClick={onDm}>
               <MessageCircle size={15} /> Message
             </Button>

@@ -11,6 +11,7 @@ import {
   Trash2,
   Sparkles,
   X,
+  UserPlus,
 } from "lucide-react";
 import { queryClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
@@ -25,6 +26,7 @@ const TYPE_ICON = {
   broadcast: <Megaphone size={14} />,
   system: <Sparkles size={14} />,
   dm: <MessageSquareReply size={14} />,
+  friend: <UserPlus size={14} />,
 };
 
 const TYPE_COLOR: Record<string, string> = {
@@ -35,14 +37,17 @@ const TYPE_COLOR: Record<string, string> = {
   broadcast: "text-flag-red",
   system: "text-fg/60",
   dm: "text-flag-green",
+  friend: "text-flag-gold",
 };
 
 export function NotificationBell({
   onNavigate,
   onOpenDm,
+  onOpenProfile,
 }: {
   onNavigate?: (tab: string) => void;
   onOpenDm?: () => void;
+  onOpenProfile?: () => void;
 }) {
   const { user } = useStore();
   const [open, setOpen] = useState(false);
@@ -154,6 +159,8 @@ export function NotificationBell({
                   // Route to the relevant page
                   if (n.type === "dm") {
                     onOpenDm?.();
+                  } else if (n.type === "friend") {
+                    onOpenProfile?.();
                   } else if (n.type === "event") {
                     onNavigate?.("events");
                   } else if (n.type === "rank" || n.type === "system") {

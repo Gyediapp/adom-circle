@@ -146,6 +146,27 @@ export function Community() {
 
   const activeRoom = rooms?.find((r) => r.id === roomId) ?? rooms?.[0] ?? null;
 
+  // When arriving from the homepage "Join chat" card, jump straight into the
+  // chosen room (set via sessionStorage before switching to this tab).
+  useEffect(() => {
+    try {
+      const pending = sessionStorage.getItem("adom_pending_room");
+      if (pending) {
+        sessionStorage.removeItem("adom_pending_room");
+        setRoomId(pending);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // How many people are in each room right now (polled lightly).
+  const { data: presence = {} } = useQuery(
+    queryClient.community.roomPresence.queryOptions({
+      refetchInterval: 15_000,
+    }),
+  );
+
   const { data: messages } = useQuery(
     queryClient.community.liveMessages.byRoom.experimental_liveOptions({
       input: { roomId: activeRoom?.id ?? "" },
@@ -670,8 +691,14 @@ export function Community() {
               <p className={`mt-0.5 line-clamp-1 text-[12px] ${activeRoom?.id === r.id ? "text-cream/60" : "text-fg/45"}`}>
                 {r.description}
               </p>
-              <p className={`mt-1 text-[11px] font-semibold ${activeRoom?.id === r.id ? "text-gold-soft" : "text-fg/35"}`}>
-                {r.messageCount} messages
+              <p className={`mt-1 flex items-center justify-between gap-2 text-[11px] font-semibold ${activeRoom?.id === r.id ? "text-gold-soft" : "text-fg/35"}`}>
+                <span>{r.messageCount} messages</span>
+                {(presence?.[r.id] ?? 0) > 0 && (
+                  <span className={cn("inline-flex items-center gap-1", activeRoom?.id === r.id ? "text-gold-soft" : "text-flag-green")}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-flag-green" />
+                    {presence![r.id]} online
+                  </span>
+                )}
               </p>
             </button>
           ))}
@@ -992,7 +1019,8 @@ export function Community() {
                   <p className="text-[12px] text-fg/50">{activeRoom.description}</p>
                 </div>
                 <span className="flex items-center gap-1.5 rounded-full bg-flag-green/10 px-3 py-1 text-[11px] font-bold text-flag-green">
-                  <span className="h-2 w-2 animate-pulse-soft rounded-full bg-flag-green" /> live
+                  <span className="h-2 w-2 animate-pulse-soft rounded-full bg-flag-green" />
+                  {Math.max(1, presence?.[activeRoom.id] ?? 1)} online
                 </span>
               </div>
 
@@ -1398,10 +1426,6 @@ export function Community() {
         memberId={profileMember}
         open={!!profileMember}
         onClose={() => setProfileMember(null)}
-        onFollow={() => {
-          if (!me || !profileMember) return;
-          follow.mutate({ memberId: me.id, targetId: profileMember });
-        }}
         onDm={() => {
           if (!me || !profileMember) return;
           setProfileMember(null);

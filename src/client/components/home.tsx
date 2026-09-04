@@ -30,7 +30,7 @@ import { Button, Card, Chip, Modal, SectionHeading, Stat, ProgressBar } from "./
 import { FacebookIcon, WhatsAppIcon, YouTubeIcon, TikTokIcon } from "@/client/lib/brand-icons";
 import { LogoMark, Star } from "@/client/lib/logo";
 import { GHANA_REGIONS, regionName, type GhanaRegion } from "@/server/data/regions";
-import { formatNumber, timeAgo } from "@/client/lib/format";
+import { formatNumber, timeAgo, cn } from "@/client/lib/format";
 import type { Tab } from "./navbar";
 
 const THEME_ICONS: Record<string, React.ReactNode> = {
@@ -95,6 +95,11 @@ export function Home({
     queryClient.suggestions.list.queryOptions(),
   );
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
+  const { data: liveRooms = {} } = useQuery(
+    queryClient.community.roomPresence.queryOptions({
+      refetchInterval: 15_000,
+    }),
+  );
   const { data: ads } = useQuery(queryClient.events.adsPublic.queryOptions());
   const { data: events } = useQuery(queryClient.events.list.queryOptions());
   const { data: threads } = useQuery(
@@ -178,6 +183,16 @@ export function Home({
     window.setTimeout(() => {
       document.getElementById("voice")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 300);
+  };
+
+  // Jump straight into a specific chatroom from the homepage.
+  const joinRoom = (roomId: string) => {
+    try {
+      sessionStorage.setItem("adom_pending_room", roomId);
+    } catch {
+      // ignore
+    }
+    go("community");
   };
 
   return (
@@ -795,6 +810,54 @@ export function Home({
           </div>
         </div>
       </section>
+
+      {/* ================= LIVE ROOMS — see who's chatting now ================= */}
+      {(rooms?.length ?? 0) > 0 && (
+        <section className="bg-soft py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6">
+            <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+              <SectionHeading
+                eyebrow="Live now"
+                title={<>Rooms with <span className="text-flag-green">people in them</span></>}
+                sub="See which conversations are busy right now and jump straight in."
+              />
+              <Button variant="outline" className="shrink-0" onClick={() => go("community")}>
+                Open all rooms <ArrowRight size={15} />
+              </Button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {rooms!.slice(0, 8).map((r) => {
+                const n = liveRooms[r.id] ?? 0;
+                const busy = n > 0;
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => joinRoom(r.id)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-2xl border bg-card px-4 py-3.5 text-left transition-all cursor-pointer",
+                      busy
+                        ? "border-flag-green/40 shadow-sm hover:border-flag-green hover:shadow-md"
+                        : "border-fg/10 hover:border-fg/30",
+                    )}
+                  >
+                    <span className="text-xl">{r.icon}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">{r.name}</span>
+                      <span className={cn("mt-0.5 flex items-center gap-1.5 text-[11px] font-semibold", busy ? "text-flag-green" : "text-fg/40")}>
+                        <span className={cn("h-2 w-2 rounded-full", busy ? "animate-pulse-soft bg-flag-green" : "bg-fg/20")} />
+                        {busy ? `${n} ${n === 1 ? "person" : "people"} chatting` : "Quiet right now"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-ink px-3.5 py-1.5 text-[11px] font-bold text-cream">
+                      {busy ? "Join chat" : "Start chat"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ================= STORIES / NEWS ================= */}
       <section id="stories" className="scroll-mt-28 bg-soft py-24">

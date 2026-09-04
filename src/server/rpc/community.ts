@@ -24,6 +24,12 @@ export type Room = z.output<typeof RoomSchema>;
 
 export const roomKV = createKV<Room>("rooms");
 
+// Live presence: how many people are currently viewing each room (chat view).
+// Counted by active liveMessages.byRoom subscriptions — the client subscribes
+// only to the room it's viewing, so this is real "in the room right now" data.
+// In-memory only: fine for a single Railway replica; resets on restart.
+const roomViewers = new Map<string, Set<string>>();
+
 // Existing rooms predate these fields — derive sensible defaults from the
 // room id so the flagship rooms work without a reseed.
 function normalizeRoom(r: Room): Room {
@@ -375,12 +381,32 @@ export const community = {
   getMessages,
   liveMessages: {
     byRoom: os.input(z.object({ roomId: z.string() })).handler(async function* ({ input, signal }) {
-      yield call(getMessages, { roomId: input.roomId }, { signal });
-      for await (const _ of messageKV.subscribe()) {
+      const viewerId = randomUUID();
+      let viewers = roomViewers.get(input.roomId);
+      if (!viewers) {
+        viewers = new Set();
+        roomViewers.set(input.roomId, viewers);
+      }
+      viewers.add(viewerId);
+      try {
         yield call(getMessages, { roomId: input.roomId }, { signal });
+        for await (const _ of messageKV.subscribe()) {
+          yield call(getMessages, { roomId: input.roomId }, { signal });
+        }
+      } finally {
+        viewers.delete(viewerId);
+        if (viewers.size === 0) roomViewers.delete(input.roomId);
       }
     }),
   },
+  // How many people are in each room right now (public, lightweight).
+  roomPresence: os.handler(async () => {
+    const out: Record<string, number> = {};
+    for (const [roomId, viewers] of roomViewers) {
+      if (viewers.size > 0) out[roomId] = viewers.size;
+    }
+    return out;
+  }),
   sendMessage: os
     .input(
       z

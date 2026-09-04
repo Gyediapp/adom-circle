@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { Crown, MapPin, Vote, ShieldCheck, Award, TrendingUp, Eye } from "lucide-react";
+import { Crown, MapPin, Vote, ShieldCheck, Award, TrendingUp, Eye, UserPlus, Check, X, Clock, Users } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { Avatar, Chip, Modal, ProgressBar, Button, Toggle } from "./ui";
@@ -10,7 +10,7 @@ import { regionName } from "@/server/data/regions";
 import { cn } from "@/client/lib/format";
 
 export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { user } = useStore();
+  const { user, toast, refresh } = useStore();
 
   const { data: member } = useQuery(
     queryClient.members.byId.queryOptions({
@@ -18,9 +18,25 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
       enabled: !!user && open,
     }),
   );
+  const { data: friendReqs } = useQuery(
+    queryClient.members.friendRequests.queryOptions({
+      input: { memberId: user?.id ?? "" },
+      enabled: !!user && open && !!member,
+    }),
+  );
   const { data: rooms } = useQuery(queryClient.community.getRooms.queryOptions());
-  const { toast } = useStore();
   const tanQuery = useQueryClient();
+
+  const act = async (fn: () => Promise<unknown>, msg: string) => {
+    try {
+      await fn();
+      toast(msg);
+      tanQuery.invalidateQueries({ queryKey: ["members"] });
+      await refresh();
+    } catch (e: any) {
+      toast(e?.message ?? "Failed", "error");
+    }
+  };
 
   const savePrivacy = useMutation(
     queryClient.members.update.mutationOptions({
@@ -100,6 +116,84 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
             </div>
           </div>
         )}
+
+        {/* Friends — requests in, pending out, count */}
+        <div className="mt-6">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-fg/50">
+            <Users size={13} className="text-flag-red" /> Friends
+            <span className="rounded-full bg-flag-green/10 px-2 py-0.5 text-[10px] font-bold normal-case tracking-normal text-flag-green">
+              {(member.friends ?? []).length}
+            </span>
+            {friendReqs && friendReqs.incoming.length > 0 && (
+              <span className="rounded-full bg-flag-red/10 px-2 py-0.5 text-[10px] font-bold normal-case tracking-normal text-flag-red">
+                {friendReqs.incoming.length} request{friendReqs.incoming.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </p>
+
+          {friendReqs && friendReqs.incoming.length > 0 && (
+            <div className="mb-2 space-y-2">
+              {friendReqs.incoming.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 rounded-2xl border border-flag-gold/30 bg-flag-gold/5 px-4 py-2.5">
+                  <span className="min-w-0 flex-1 text-[13px] font-bold">{r.fromName}</span>
+                  <button
+                    onClick={() =>
+                      act(
+                        () => rpcClient.members.respondFriendRequest({ memberId: user!.id, requestId: r.id, accept: true }),
+                        `${r.fromName} is now your friend 🎉`,
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-full bg-flag-green px-3 py-1.5 text-xs font-bold text-cream hover:bg-[#00552f] transition-colors cursor-pointer"
+                  >
+                    <Check size={12} /> Accept
+                  </button>
+                  <button
+                    onClick={() =>
+                      act(
+                        () => rpcClient.members.respondFriendRequest({ memberId: user!.id, requestId: r.id, accept: false }),
+                        "Request declined",
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-full border border-fg/15 px-3 py-1.5 text-xs font-bold text-fg/55 hover:text-flag-red hover:border-flag-red/40 transition-colors cursor-pointer"
+                  >
+                    <X size={12} /> Decline
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {friendReqs && friendReqs.outgoing.length > 0 && (
+            <div className="mb-2 space-y-1.5">
+              {friendReqs.outgoing.map((r) => (
+                <div key={r.id} className="flex items-center gap-2 rounded-xl bg-soft/60 px-4 py-2 text-[13px]">
+                  <Clock size={13} className="shrink-0 text-fg/40" />
+                  <span className="min-w-0 flex-1 truncate font-semibold text-fg/65">
+                    Request to {r.toName} — pending
+                  </span>
+                  <button
+                    onClick={() =>
+                      act(
+                        () => rpcClient.members.cancelFriendRequest({ memberId: user!.id, requestId: r.id }),
+                        "Request cancelled",
+                      )
+                    }
+                    className="rounded-full p-1 text-fg/35 hover:text-flag-red hover:bg-flag-red/5 cursor-pointer"
+                    title="Cancel request"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {(!friendReqs || (friendReqs.incoming.length === 0 && friendReqs.outgoing.length === 0)) && (
+            <p className="text-[12px] text-fg/45">
+              Add friends from the community — a request is only accepted when the other person agrees.
+            </p>
+          )}
+        </div>
 
         {/* Delegation */}
         {managed.length > 0 && (

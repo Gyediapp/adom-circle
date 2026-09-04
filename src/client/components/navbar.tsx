@@ -215,7 +215,7 @@ export function Navbar({
             </button>
           )}
 
-          {user && <NotificationBell onNavigate={(tab) => go(tab as Tab)} onOpenDm={() => setDmOpen(true)} />}
+          {user && <NotificationBell onNavigate={(tab) => go(tab as Tab)} onOpenDm={() => setDmOpen(true)} onOpenProfile={() => setProfileOpen(true)} />}
 
           {user ? (
             <>

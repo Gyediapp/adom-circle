@@ -33,6 +33,7 @@ export const MemberSchema = z.object({
   joinedAt: z.string(),
   lastSeenAt: z.string().nullable().optional(),
   following: z.array(z.string()),
+  friends: z.array(z.string()).optional(),
   followerCount: z.number(),
   savedMessages: z.array(z.string()),
   status: z.enum(["active", "suspended"]),
@@ -55,6 +56,7 @@ export function normalizeMember(m: Member): Member {
   return {
     ...m,
     following: m.following ?? [],
+    friends: m.friends ?? [],
     followerCount: m.followerCount ?? 0,
     savedMessages: m.savedMessages ?? [],
     status: m.status ?? "active",
@@ -104,6 +106,21 @@ export type PublicMember = Omit<
 export const memberKV = createKV<Member>("members");
 const sessionKV = createKV<{ memberId: string; createdAt: string }>("sessions");
 const attemptKV = createKV<{ count: number; firstAt: string }>("auth-attempts");
+
+// ---------- Friend requests ----------
+// A request must be accepted by the other party before the two members become
+// friends. Pending requests can be cancelled by the sender or declined by the
+// receiver; acceptances are recorded on both member records (friends[]).
+export interface FriendRequest {
+  id: string;
+  fromId: string;
+  fromName: string;
+  toId: string;
+  toName: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+}
+export const friendRequestKV = createKV<FriendRequest>("friend-requests");
 
 // ---------- Password hashing (scrypt — no external deps) ----------
 
@@ -642,6 +659,116 @@ export const members = {
       return sanitizeMember(meUpdated);
     }),
 
+  // ---------- Friends (mutual, request → accept) ----------
+
+  sendFriendRequest: os
+    .input(z.object({ memberId: z.string(), targetId: z.string() }))
+    .handler(async ({ input }) => {
+      const me = await requireMember(input.memberId);
+      if (me.id === input.targetId) throw new Error("You can't add yourself as a friend");
+      const target = await memberKV.getItem(input.targetId);
+      if (!target) throw new Error("Member not found");
+      if ((me.friends ?? []).includes(target.id)) throw new Error("You are already friends");
+      const pending = (await friendRequestKV.getAllItems()).find(
+        (r) =>
+          r.status === "pending" &&
+          ((r.fromId === me.id && r.toId === target.id) || (r.fromId === target.id && r.toId === me.id)),
+      );
+      if (pending) throw new Error("A friend request is already pending with this member");
+      const request: FriendRequest = {
+        id: randomUUID(),
+        fromId: me.id,
+        fromName: me.name,
+        toId: target.id,
+        toName: target.name,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      await friendRequestKV.setItem(request.id, request);
+      await notify(
+        target.id,
+        "friend",
+        `${me.name} sent you a friend request`,
+        `${me.name} wants to be your friend — open your profile to accept.`,
+      ).catch(() => {});
+      return request;
+    }),
+
+  respondFriendRequest: os
+    .input(z.object({ memberId: z.string(), requestId: z.string(), accept: z.boolean() }))
+    .handler(async ({ input }) => {
+      const me = await requireMember(input.memberId);
+      const request = await friendRequestKV.getItem(input.requestId);
+      if (!request || request.toId !== me.id) throw new Error("Friend request not found");
+      if (request.status !== "pending") throw new Error("This request is no longer pending");
+      if (input.accept) {
+        const from = await memberKV.getItem(request.fromId);
+        const to = await memberKV.getItem(request.toId);
+        if (from && to) {
+          const fromNorm = normalizeMember(from);
+          const toNorm = normalizeMember(to);
+          const fromFriends = fromNorm.friends ?? [];
+          const toFriends = toNorm.friends ?? [];
+          if (!fromFriends.includes(to.id)) {
+            await memberKV.setItem(from.id, { ...fromNorm, friends: [...fromFriends, to.id] });
+          }
+          if (!toFriends.includes(from.id)) {
+            await memberKV.setItem(to.id, { ...toNorm, friends: [...toFriends, from.id] });
+          }
+          await notify(
+            from.id,
+            "friend",
+            `${to.name} accepted your friend request`,
+            `You and ${to.name} are now friends on Adom Circle.`,
+          ).catch(() => {});
+        }
+      }
+      await friendRequestKV.removeItem(request.id);
+      return { ok: true };
+    }),
+
+  cancelFriendRequest: os
+    .input(z.object({ memberId: z.string(), requestId: z.string() }))
+    .handler(async ({ input }) => {
+      const me = await requireMember(input.memberId);
+      const request = await friendRequestKV.getItem(input.requestId);
+      if (!request || request.fromId !== me.id) throw new Error("Friend request not found");
+      await friendRequestKV.removeItem(request.id);
+      return { ok: true };
+    }),
+
+  removeFriend: os
+    .input(z.object({ memberId: z.string(), friendId: z.string() }))
+    .handler(async ({ input }) => {
+      const me = await requireMember(input.memberId);
+      const friend = await memberKV.getItem(input.friendId);
+      if (!friend) throw new Error("Member not found");
+      const meNorm = normalizeMember(me);
+      const friendNorm = normalizeMember(friend);
+      const meFriends = meNorm.friends ?? [];
+      const friendFriends = friendNorm.friends ?? [];
+      const nextMe = { ...meNorm, friends: meFriends.filter((id) => id !== friend.id) };
+      const nextFriend = { ...friendNorm, friends: friendFriends.filter((id) => id !== me.id) };
+      await memberKV.setItem(me.id, nextMe);
+      await memberKV.setItem(friend.id, nextFriend);
+      return sanitizeMember(nextMe);
+    }),
+
+  friendRequests: os
+    .input(z.object({ memberId: z.string() }))
+    .handler(async ({ input }) => {
+      const me = await requireMember(input.memberId);
+      const all = (await friendRequestKV.getAllItems()).filter((r) => r.status === "pending");
+      return {
+        incoming: all
+          .filter((r) => r.toId === me.id)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        outgoing: all
+          .filter((r) => r.fromId === me.id)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      };
+    }),
+
   update: os
     .input(
       z.object({
@@ -686,7 +813,7 @@ export const members = {
     await requireAdmin(input.adminId);
     return (await memberKV.getAllItems())
       .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt))
-      .map(sanitizeMember);
+      .map((m) => sanitizeMember(normalizeMember(m)));
   }),
 
   setRole: os
