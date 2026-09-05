@@ -40,6 +40,7 @@ import { DeepSeekRateCard, DeepSeekStatusPill } from "./deepseek-card";
 import { captchaConfigured } from "@/client/lib/captcha";
 import { cn, timeAgo, isOnline, presenceLabel } from "@/client/lib/format";
 import { GHANA_REGIONS } from "@/server/data/regions";
+import { MdEditor } from "./md-editor";
 import type { Settings, Post } from "@/server/rpc/site";
 import type { PublicMember } from "@/server/rpc/members";
 
@@ -1278,8 +1279,7 @@ function PostsManager() {
           <div className="space-y-4">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Post title"
               className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm font-semibold outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15" />
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Post body…"
-              className="h-36 w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15" />
+            <MdEditor value={body} onChange={setBody} placeholder="Write the story… **bold**, *italics*, ## headings, lists and links all work." rows={7} />
             <div className="grid gap-4 sm:grid-cols-3">
               <select value={category} onChange={(e) => setCategory(e.target.value)}
                 className="rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none cursor-pointer">

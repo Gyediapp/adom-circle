@@ -32,6 +32,7 @@ import { FacebookIcon, WhatsAppIcon, YouTubeIcon, TikTokIcon } from "@/client/li
 import { LogoMark, Star } from "@/client/lib/logo";
 import { GHANA_REGIONS, regionName, type GhanaRegion } from "@/server/data/regions";
 import { formatNumber, timeAgo, cn } from "@/client/lib/format";
+import { plainText } from "@/client/lib/markdown";
 import type { Tab } from "./navbar";
 import type { PublicMember } from "@/server/rpc/members";
 
@@ -227,7 +228,7 @@ export function Home({
 
         <div className="hero-full relative mx-auto flex max-w-7xl flex-col justify-center px-4 pb-24 pt-32 sm:px-6">
           <div className="max-w-3xl">
-            <p className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-cream/20 bg-page/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-gold-soft backdrop-blur">
+            <p className="animate-fade-up mb-6 inline-flex items-center gap-2 rounded-full border border-cream/20 bg-page/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-soft backdrop-blur sm:text-xs">
               <Star size={13} className="text-flag-gold" />
               {settings?.hero.badge}
             </p>
@@ -270,7 +271,7 @@ export function Home({
               <span className="gold-gradient-text italic">{settings?.hero.highlight}</span>
             </h1>
 
-            <p className="animate-fade-up mt-6 max-w-xl text-base leading-relaxed text-cream/80 sm:text-lg" style={{ animationDelay: "0.2s" }}>
+            <p className="animate-fade-up mt-6 max-w-xl text-balance text-base leading-relaxed text-cream/80 sm:text-lg" style={{ animationDelay: "0.2s" }}>
               {settings?.hero.subtitle}
             </p>
 
@@ -326,19 +327,19 @@ export function Home({
           {Array.from({ length: 2 }).map((_, i) => (
             <div key={i} className="flex items-center gap-12 whitespace-nowrap text-[12px] font-bold uppercase tracking-[0.32em]">
               <span className="text-cream/75">One Circle</span>
-              <Star size={14} className="text-ink" outline />
+              <Star size={14} className="text-cream/35" />
               <span className="text-flag-gold">One Ghana</span>
-              <Star size={14} className="text-ink" outline />
+              <Star size={14} className="text-cream/35" />
               <span className="text-cream/75">Peace</span>
-              <Star size={14} className="text-ink" outline />
+              <Star size={14} className="text-cream/35" />
               <span className="text-flag-gold">Progress</span>
-              <Star size={14} className="text-ink" outline />
+              <Star size={14} className="text-cream/35" />
               <span className="text-cream/75">Constitution Above All</span>
-              <Star size={14} className="text-ink" outline />
+              <Star size={14} className="text-cream/35" />
               <span className="text-flag-gold">16 Regions</span>
-              <Star size={14} className="text-ink" outline />
+              <Star size={14} className="text-cream/35" />
               <span className="text-cream/75">Black Star Forever</span>
-              <Star size={14} className="text-ink" outline />
+              <Star size={14} className="text-cream/35" />
             </div>
           ))}
         </div>
@@ -513,7 +514,7 @@ export function Home({
 
       {/* ================= SHOWCASE (ADS) ================= */}
       {homeAds.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+        <section className="mx-auto max-w-7xl px-4 py-16 sm:py-24 sm:px-6">
           <div className="mb-6 flex items-center justify-between">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-fg/45">
               <Megaphone size={14} className="text-flag-red" /> Showcase — supported by partners & member businesses
@@ -556,12 +557,13 @@ export function Home({
               eyebrow="Mark your calendar"
               title={<>Upcoming <span className="text-flag-red">events</span></>}
             />
-            <button
+            <Button
+              variant="outline"
+              className="hidden shrink-0 px-4 py-2 text-sm sm:inline-flex"
               onClick={() => go("events")}
-              className="hidden sm:inline-flex items-center gap-1.5 text-sm font-bold text-flag-red hover:gap-2.5 transition-all cursor-pointer"
             >
-              All events <ChevronRight size={15} />
-            </button>
+              All events <ArrowRight size={15} />
+            </Button>
           </div>
           <div className="mt-8 grid gap-5 md:grid-cols-3">
             {upcomingEvents.map((e) => {
@@ -602,7 +604,7 @@ export function Home({
 
       {/* ================= FEATURED EVENTS CAROUSEL ================= */}
       {featuredEvents.length > 0 && (
-        <section className="bg-soft py-16">
+        <section className="bg-soft py-16 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
             <div className="mb-8 flex items-end justify-between gap-4">
               <SectionHeading
@@ -610,12 +612,13 @@ export function Home({
                 title={<>Featured <span className="text-flag-red">events</span></>}
                 sub="Hand-picked by the circle — hover or tap to pause, click to explore."
               />
-              <button
+              <Button
+                variant="outline"
+                className="hidden shrink-0 px-4 py-2 text-sm sm:inline-flex"
                 onClick={() => go("events")}
-                className="hidden sm:inline-flex items-center gap-1.5 text-sm font-bold text-flag-red hover:gap-2.5 transition-all cursor-pointer"
               >
-                All events <ChevronRight size={15} />
-              </button>
+                All events <ArrowRight size={15} />
+              </Button>
             </div>
 
             <div
@@ -825,9 +828,9 @@ export function Home({
 
       {/* ================= LIVE ROOMS — see who's chatting now ================= */}
       {(rooms?.length ?? 0) > 0 && (
-        <section className="bg-soft py-20">
+        <section className="bg-soft py-16 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
-            <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div className="mb-8 flex items-end justify-between gap-4">
               <SectionHeading
                 eyebrow="Live now"
                 title={<>Rooms with <span className="text-flag-green">people in them</span></>}
@@ -879,7 +882,7 @@ export function Home({
       )}
 
       {/* ================= STORIES / NEWS ================= */}
-      <section id="stories" className="scroll-mt-28 bg-soft py-24">
+      <section id="stories" className="scroll-mt-28 py-20 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="mb-12 flex flex-wrap items-end justify-between gap-4">
             <SectionHeading
@@ -903,7 +906,7 @@ export function Home({
                     {post.author} · {new Date(post.createdAt).toLocaleDateString()}
                   </p>
                   <p className="mt-2 font-display text-lg font-bold leading-snug">{post.title}</p>
-                  <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-fg/60">{post.body}</p>
+                  <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-fg/60">{plainText(post.body)}</p>
                 </div>
               </Card>
             ))}
@@ -935,7 +938,7 @@ export function Home({
                     <h3 className="font-display text-lg font-bold leading-snug hover:text-flag-red transition-colors line-clamp-2">
                       {t.title}
                     </h3>
-                    <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-fg/60">{t.body}</p>
+                    <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-fg/60">{plainText(t.body)}</p>
                   </button>
                   <div className="mt-4 flex items-center gap-3 text-[12px] font-semibold text-fg/50">
                     <span className="flex items-center gap-1"><Users size={13} /> {t.authorName}</span>
@@ -1020,9 +1023,6 @@ export function Home({
               );
             })}
           </div>
-          <p className="mt-6 text-center text-[12px] text-fg/45">
-            Links managed in Admin → Site content → Social & community links.
-          </p>
         </section>
       )}
 

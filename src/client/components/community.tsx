@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
-import { Button, Card, Avatar, Modal } from "./ui";
+import { Button, Card, Avatar, Modal, EmptyState } from "./ui";
 import { RankChip } from "@/client/lib/ranks";
 import { rankFor } from "@/server/data/ranks";
 import { timeAgo, cn } from "@/client/lib/format";
@@ -37,6 +37,8 @@ import type { PublicMember } from "@/server/rpc/members";
 import { DmModal } from "./dm-modal";
 import { ShareModal, type ShareTarget } from "./share-modal";
 import { MemberModal } from "./member-modal";
+import { MdEditor } from "./md-editor";
+import { RichText, plainText } from "@/client/lib/markdown";
 import { BarChart3, Kanban, SmilePlus, ChevronDown, ChevronUp, Volume2, VolumeX } from "lucide-react";
 
 type ChatMsg = Message & {
@@ -1054,9 +1056,16 @@ export function Community() {
 
               <div ref={chatScroll} className="flex-1 space-y-4 overflow-y-auto bg-soft/40 px-4 py-4 sm:px-5">
                 {msgList.length === 0 && (
-                  <div className="flex h-full items-center justify-center text-sm text-fg/40">
-                    Start the conversation in {activeRoom.name} 💬
-                  </div>
+                  <EmptyState
+                    className="h-full"
+                    icon={<MessageCircle size={20} />}
+                    title={<>Start the conversation in {activeRoom.name}</>}
+                    sub={
+                      me
+                        ? "Every circle starts with one voice — say something worth Ghana hearing."
+                        : "Sign in and be the first to send a message here."
+                    }
+                  />
                 )}
                 {chatGroups.tops.map((m) => {
                   const authorInfo =
@@ -1337,8 +1346,12 @@ export function Community() {
                 }}
               />
               {roomThreads.length === 0 && (
-                <Card className="p-10 text-center text-sm text-fg/45">
-                  No discussions yet in {activeRoom.name}. Start one above! 🎉
+                <Card className="overflow-hidden">
+                  <EmptyState
+                    icon={<MessagesSquare size={20} />}
+                    title={<>No discussions yet in {activeRoom.name}</>}
+                    sub="Start the first thread — a question, an idea, or something worth sharing with the circle."
+                  />
                 </Card>
               )}
               {roomThreads.map((t) => (
@@ -2068,11 +2081,11 @@ function ForumComposer({
             placeholder="Discussion title"
             className="w-full rounded-xl border border-fg/15 bg-card px-4 py-2.5 text-sm font-semibold outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15"
           />
-          <textarea
+          <MdEditor
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={setBody}
             placeholder="Share your thoughts — respectfully, constructively, for Ghana 🇬🇭"
-            className="h-28 w-full rounded-xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/15"
+            rows={4}
           />
           <div className="flex gap-2">
             <Button
@@ -2252,7 +2265,7 @@ function ForumThread({
         ) : (
           <>
             <h3 className="font-display text-xl font-bold leading-snug">{title}</h3>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-fg/70">{body}</p>
+            <RichText text={body} className="mt-2 text-sm text-fg/70" />
           </>
         )}
 
@@ -2319,7 +2332,7 @@ function ForumThread({
                           </div>
                         </div>
                       ) : (
-                        <p className="mt-0.5 leading-relaxed text-fg/75">{r.text}</p>
+                        <RichText text={r.text} className="mt-1 text-sm text-fg/75" />
                       )}
                     </div>
                     <div className="mt-1 flex items-center gap-1 pl-1">
@@ -2363,7 +2376,7 @@ function ForumThread({
                   setReplyText("");
                 }
               }}
-              placeholder="Write a reply…"
+              placeholder="Write a reply… (*italic*, **bold** & links work)"
               className="flex-1 rounded-full border border-fg/12 bg-card px-4 py-2 text-sm outline-none focus:border-flag-green focus:ring-2 focus:ring-flag-green/15"
             />
             <Button

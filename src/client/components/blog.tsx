@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, User, Star, Newspaper, BookOpen } from "lucide-react";
 import { queryClient } from "@/client/rpc-client";
-import { Button, Card, Chip, Modal } from "./ui";
+import { Button, Card, Chip, EmptyState, Modal } from "./ui";
+import { RichText, plainText } from "@/client/lib/markdown";
 import { cn, timeAgo } from "@/client/lib/format";
 import type { Post } from "@/server/rpc/site";
 
@@ -68,12 +69,28 @@ export function Blog() {
 
       {/* Grid */}
       {list.length === 0 ? (
-        <Card className="p-16 text-center">
-          <Newspaper size={26} className="mx-auto mb-3 text-fg/30" />
-          <p className="text-sm font-bold">No posts here yet</p>
-          <p className="mt-1 text-[13px] text-fg/50">
-            {cat === "All" ? "The first story will appear here soon." : `No ${cat} posts yet — check back soon.`}
-          </p>
+        <Card className="overflow-hidden">
+          <EmptyState
+            icon={<Newspaper size={20} />}
+            title={
+              <>
+                No{" "}
+                {cat === "All"
+                  ? "stories"
+                  : cat === "News"
+                    ? "news"
+                    : cat === "Story"
+                      ? "stories"
+                      : `${cat.toLowerCase()} stories`}{" "}
+                yet
+              </>
+            }
+            sub={
+              cat === "All"
+                ? "The first story from the circle will appear here soon."
+                : "Stories in this category are coming — check back soon."
+            }
+          />
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -97,7 +114,7 @@ export function Blog() {
                   <span className="flex items-center gap-1"><CalendarDays size={11} /> {timeAgo(post.createdAt)}</span>
                 </div>
                 <h3 className="mt-2.5 font-display text-lg font-bold leading-snug">{post.title}</h3>
-                <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-fg/60">{post.body}</p>
+                <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-fg/60">{plainText(post.body)}</p>
                 <div className="mt-auto pt-5">
                   <Button
                     variant="outline"
@@ -134,9 +151,7 @@ export function Blog() {
                 <span className="flex items-center gap-1.5"><User size={12} /> {reading.author}</span>
                 <span className="flex items-center gap-1.5"><CalendarDays size={12} /> {new Date(reading.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</span>
               </div>
-              <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-fg/85">
-                {reading.body}
-              </div>
+              <RichText text={reading.body} className="text-[15px] text-fg/85" />
               <div className="mt-8 flex items-center gap-2 rounded-2xl bg-soft p-4 text-[13px] text-fg/60">
                 <Star size={14} className="shrink-0 text-flag-gold" aria-hidden />
                 Published with love by the Adom Circle team. Join the conversation in the Community.

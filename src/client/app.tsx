@@ -173,7 +173,7 @@ function Shell() {
             key={t.id}
             className={cn(
               "flex w-full items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-semibold text-cream shadow-2xl animate-fade-up",
-              t.kind === "success" ? "bg-ink" : "bg-flag-red",
+              t.kind === "success" ? "bg-ink dark:border dark:border-cream/15" : "bg-flag-red",
             )}
           >
             {t.kind === "success" ? <CheckCircle2 size={17} className="shrink-0 text-flag-gold" /> : <AlertCircle size={17} className="shrink-0" />}

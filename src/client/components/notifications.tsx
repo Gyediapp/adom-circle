@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { queryClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
+import { EmptyState } from "./ui";
 import { timeAgo } from "@/client/lib/format";
 import { cn } from "@/client/lib/format";
 
@@ -146,9 +147,12 @@ export function NotificationBell({
 
           <div className="max-h-[min(70vh,400px)] overflow-y-auto overscroll-contain">
             {(!items || items.length === 0) && (
-              <p className="px-6 py-10 text-center text-sm text-fg/45">
-                No notifications yet. Join a discussion or RSVP to an event! 🇬🇭
-              </p>
+              <EmptyState
+                className="px-5 py-9"
+                icon={<Bell size={18} />}
+                title="No notifications yet"
+                sub="Join a discussion, RSVP to an event, or take the voter's pledge — the circle will keep you posted."
+              />
             )}
             {items?.map((n) => (
               <button

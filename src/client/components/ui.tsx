@@ -18,7 +18,7 @@ export function Button({
     ghost: "text-fg hover:bg-ink/5",
     outline: "border border-fg/20 text-fg hover:border-flag-red hover:text-flag-red",
     danger: "bg-flag-red text-cream hover:bg-[#a80d1e]",
-    dark: "bg-ink text-cream hover:bg-ink-2",
+    dark: "bg-ink text-cream hover:bg-ink-2 dark:border dark:border-cream/15",
   };
   return (
     <button
@@ -42,10 +42,12 @@ export function Chip({
   className?: string;
 }) {
   const tones = {
-    gold: "bg-flag-gold/90 text-fg",
+    // Gold chips keep ink (dark) text in BOTH themes — fg flips to cream in
+    // dark mode, which would be unreadable on the bright gold.
+    gold: "bg-flag-gold/90 text-ink",
     red: "bg-flag-red/10 text-flag-red border border-flag-red/20",
     green: "bg-flag-green/10 text-flag-green border border-flag-green/20",
-    ink: "bg-ink text-cream",
+    ink: "bg-ink text-cream dark:border dark:border-cream/15",
     sand: "bg-soft text-fg border border-fg/10",
   };
   return (
@@ -235,6 +237,35 @@ export function Stat({
         {value}
       </p>
       <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-fg/50">{label}</p>
+    </div>
+  );
+}
+
+// Consistent friendly "nothing here yet" block — icon, headline, one line of
+// context and an optional action. Used across chat, forum, blog, events, DMs.
+export function EmptyState({
+  icon,
+  title,
+  sub,
+  action,
+  className,
+}: {
+  icon?: ReactNode;
+  title: ReactNode;
+  sub?: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col items-center justify-center px-6 py-12 text-center", className)}>
+      {icon && (
+        <span className="mb-3.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-soft text-fg/40">
+          {icon}
+        </span>
+      )}
+      <p className="font-display text-lg font-bold leading-snug text-fg/75">{title}</p>
+      {sub && <p className="mt-1.5 max-w-sm text-[13px] leading-relaxed text-fg/45">{sub}</p>}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }

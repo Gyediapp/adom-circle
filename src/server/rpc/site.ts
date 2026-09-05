@@ -48,15 +48,15 @@ export const settingsKV = createKV<Settings>("settings");
 
 export const DEFAULT_SETTINGS: Settings = {
   announcement: {
-    text: "Adom Circle exists for one purpose — a peaceful, prosperous Ghana where every citizen is seen, heard and valued.",
+    text: "One circle, one purpose — a peaceful, prosperous Ghana where every citizen is seen, heard and valued.",
     enabled: true,
   },
   hero: {
-    badge: "Ghana's circle of values, civic duty & progress",
+    badge: "For every Ghanaian — at home & abroad",
     title: "One Circle.",
     highlight: "One Ghana.",
     subtitle:
-      "Adom Circle unites Ghanaians at home and abroad in service of peace, development and prosperity — under one Constitution, above every institution.",
+      "Uniting Ghanaians at home and abroad for peace, development and prosperity — under one Constitution, above every institution.",
     image: "/output/images/hero.jpg",
   },
   stats: {

@@ -97,7 +97,7 @@ export function AuthModal({
         });
         setDevCode(res.devCode);
         setStep(3);
-        toast("Account created! Check your email for the verification code.");
+        toast("Account created — a verification code is on its way to your email.");
       } catch (e: any) {
         toast(friendlyError(e), "error");
       } finally {
@@ -196,6 +196,7 @@ export function AuthModal({
               <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Email address</span>
               <input
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
@@ -206,6 +207,7 @@ export function AuthModal({
               <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Password</span>
               <input
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -224,9 +226,6 @@ export function AuthModal({
             <Button variant="gold" className="w-full py-3" onClick={handleLogin} disabled={busy}>
               {busy ? <Loader2 size={16} className="animate-spin" /> : "Sign in to the Circle"}
             </Button>
-            <p className="text-center text-xs text-fg/45">
-              Demo account: <strong>admin@adomcircle.org</strong> · <strong>Adom@2026</strong>
-            </p>
             <p className="text-center text-xs text-fg/50">
               New here?{" "}
               <button
@@ -329,19 +328,36 @@ export function AuthModal({
               <div className="space-y-4 animate-fade-up">
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Full name</span>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ama Owusu"
-                    className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20" />
+                  <input
+                    autoComplete="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Ama Owusu"
+                    className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
+                  />
                 </label>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Email</span>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
-                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20" />
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
+                    />
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Phone (optional)</span>
-                    <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+233 ..."
-                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20" />
+                    <input
+                      type="tel"
+                      autoComplete="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+233 ..."
+                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
+                    />
                   </label>
                 </div>
                 <label className="block">
@@ -350,11 +366,15 @@ export function AuthModal({
                   </span>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Create a secure password"
                     className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
                   />
+                  <span className="mt-1.5 block text-[11px] text-fg/40">
+                    Use 8 or more characters — a mix of letters and numbers keeps your account safer.
+                  </span>
                 </label>
                 {/* Honeypot — hidden from humans, bots fill it */}
                 <input
@@ -369,7 +389,7 @@ export function AuthModal({
 
                 <div className="rounded-2xl border border-flag-gold/60 bg-gold-soft/30 p-4">
                   <p className="mb-2 flex items-center gap-2 text-sm font-bold text-fg">
-                    <Star size={15} className="text-flag-red" /> Adom Circle Values — please accept to join
+                    <Star size={15} className="text-flag-red" /> Adom Circle Values
                   </p>
                   <ul className="space-y-1.5 text-[13px] leading-relaxed text-fg/70">
                     <li>• I accept and will abide by the Constitution of Ghana, which is supreme over any denomination, institution or group.</li>
@@ -384,7 +404,7 @@ export function AuthModal({
                 </div>
 
                 <Button variant="gold" className="w-full py-3" onClick={handleSignup}>
-                  Continue — your Ghana connection
+                  Continue
                 </Button>
               </div>
             )}
@@ -395,6 +415,9 @@ export function AuthModal({
                   <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-fg/50">
                     <MapPin size={13} className="text-flag-red" /> Which region in Ghana are you from?
                   </span>
+                  <p className="mb-3 text-[12px] text-fg/45">
+                    In the diaspora? Pick your home region — your circle is there too.
+                  </p>
                   <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
                     {GHANA_REGIONS.map((r) => (
                       <button
@@ -416,23 +439,43 @@ export function AuthModal({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Hometown (optional)</span>
-                    <input value={hometown} onChange={(e) => setHometown(e.target.value)} placeholder="e.g. Kumasi"
-                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20" />
+                    <input
+                      autoComplete="off"
+                      value={hometown}
+                      onChange={(e) => setHometown(e.target.value)}
+                      placeholder="e.g. Kumasi"
+                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
+                    />
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Diaspora country (optional)</span>
-                    <input value={diasporaCountry} onChange={(e) => setDiasporaCountry(e.target.value)} placeholder="e.g. Canada"
-                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20" />
+                    <input
+                      autoComplete="off"
+                      value={diasporaCountry}
+                      onChange={(e) => setDiasporaCountry(e.target.value)}
+                      placeholder="e.g. Canada"
+                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
+                    />
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Church / denomination (optional)</span>
-                    <input value={church} onChange={(e) => setChurch(e.target.value)} placeholder="e.g. Methodist"
-                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20" />
+                    <input
+                      autoComplete="off"
+                      value={church}
+                      onChange={(e) => setChurch(e.target.value)}
+                      placeholder="e.g. Methodist"
+                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
+                    />
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-fg/50">Profession (optional)</span>
-                    <input value={profession} onChange={(e) => setProfession(e.target.value)} placeholder="e.g. Nurse"
-                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20" />
+                    <input
+                      autoComplete="off"
+                      value={profession}
+                      onChange={(e) => setProfession(e.target.value)}
+                      placeholder="e.g. Nurse"
+                      className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-red focus:ring-2 focus:ring-flag-red/20"
+                    />
                   </label>
                 </div>
                 <div className="flex gap-3">

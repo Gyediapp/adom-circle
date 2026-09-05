@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
-import { Button, Card, Chip, Modal, SectionHeading } from "./ui";
+import { Button, Card, Chip, EmptyState, Modal, SectionHeading } from "./ui";
 import { cn } from "@/client/lib/format";
 import { regionName, GHANA_REGIONS } from "@/server/data/regions";
 
@@ -132,7 +132,13 @@ export function Events() {
             className="mb-8"
           />
           {upcoming.length === 0 && (
-            <Card className="p-12 text-center text-sm text-fg/45">No upcoming events yet — organise one!</Card>
+            <Card className="overflow-hidden">
+              <EmptyState
+                icon={<CalendarDays size={20} />}
+                title="No upcoming events yet"
+                sub="Meetups, workshops and volunteer days are organised by VIPs, moderators and admins — check back soon."
+              />
+            </Card>
           )}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {upcoming.map((e) => {

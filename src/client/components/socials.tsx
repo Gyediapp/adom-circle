@@ -44,7 +44,7 @@ export function SocialLinks({
             className={cn(
               "rounded-full p-2.5 transition-all duration-200 hover:-translate-y-0.5",
               tone === "dark"
-                ? "bg-ink/5 text-fg/60 hover:bg-flag-red hover:text-cream"
+                ? "bg-ink/5 text-fg/60 hover:bg-flag-red hover:text-cream dark:bg-white/5 dark:text-cream/70"
                 : "bg-white/10 text-cream/80 hover:bg-flag-gold hover:text-ink",
             )}
           >

@@ -17,6 +17,8 @@ import {
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
 import { Button, Card, Chip, Modal, ProgressBar, Stat } from "./ui";
+import { MdEditor } from "./md-editor";
+import { RichText, plainText } from "@/client/lib/markdown";
 import { formatNumber, cn } from "@/client/lib/format";
 import { GHANA_REGIONS } from "@/server/data/regions";
 
@@ -124,7 +126,7 @@ export function Projects() {
               <button onClick={() => setSelectedId(p.id)} className="mt-1 cursor-pointer">
                 <p className="font-display text-lg font-bold leading-snug hover:text-flag-red transition-colors">{p.title}</p>
               </button>
-              <p className="mt-2 line-clamp-2 flex-1 text-[13px] leading-relaxed text-fg/60">{p.description}</p>
+              <p className="mt-2 line-clamp-2 flex-1 text-[13px] leading-relaxed text-fg/60">{plainText(p.description)}</p>
               <div className="mt-4">
                 <div className="mb-1.5 flex justify-between text-[11px] font-semibold text-fg/50">
                   <span className="flex items-center gap-1"><Users size={12} /> {p.volunteers}</span>
@@ -207,7 +209,7 @@ function ProjectModal({
         <div className="p-6 sm:p-8">
           <h2 className="font-display text-2xl sm:text-3xl font-bold leading-tight">{project.title}</h2>
           <p className="mt-2 text-sm font-semibold text-fg/50">Sponsored by {project.sponsor}</p>
-          <p className="mt-3 text-sm leading-relaxed text-fg/70">{project.description}</p>
+          <RichText text={project.description} className="mt-3 text-sm text-fg/70" />
 
           <div className="mt-5 grid grid-cols-3 gap-3 rounded-2xl bg-soft/60 p-4">
             <div>
@@ -359,8 +361,7 @@ function SubmitProjectModal({ onClose }: { onClose: () => void }) {
         <div className="space-y-4">
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Project title"
             className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-green focus:ring-2 focus:ring-flag-green/15" />
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the project — need, plan, community impact…"
-            className="h-32 w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-green focus:ring-2 focus:ring-flag-green/15" />
+          <MdEditor value={description} onChange={setDescription} placeholder="Describe the project — need, plan, community impact…" rows={5} />
           <div className="grid gap-4 sm:grid-cols-2">
             <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Town / city"
               className="w-full rounded-2xl border border-fg/15 bg-card px-4 py-3 text-sm outline-none focus:border-flag-green focus:ring-2 focus:ring-flag-green/15" />

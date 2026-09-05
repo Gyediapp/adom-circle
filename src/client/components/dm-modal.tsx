@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Lock, Send, Loader2, MessageSquare, ArrowLeft, CheckCheck } from "lucide-react";
 import { queryClient, rpcClient } from "@/client/rpc-client";
 import { useStore } from "@/client/store";
-import { Modal, Avatar, Button } from "./ui";
+import { Modal, Avatar, Button, EmptyState } from "./ui";
 import { DM_MIN_POINTS } from "@/shared/constants";
 import { timeAgo, cn } from "@/client/lib/format";
 
@@ -146,11 +146,16 @@ export function DmModal({
             {/* Conversation list */}
             <div className={cn("min-h-0 overflow-y-auto border-r border-fg/10", convoId && "hidden lg:block")}>
               {convoList.length === 0 && !target && (
-                <p className="px-5 py-8 text-center text-sm text-fg/45">
-                  No conversations yet.
-                  <br />
-                  Tap the <strong>Message</strong> icon on any community message to start one.
-                </p>
+                <EmptyState
+                  className="px-5 py-10"
+                  icon={<MessageSquare size={18} />}
+                  title="No conversations yet"
+                  sub={
+                    <>
+                      Tap the <strong>Message</strong> icon on any community message to start one.
+                    </>
+                  }
+                />
               )}
               {convoList.map((c) => (
                 <button
