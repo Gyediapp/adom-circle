@@ -232,21 +232,18 @@ export function Home({
               {settings?.hero.badge}
             </p>
 
-            {/* MAJOR ACTIVITY LINKS — top of page for new visitors */}
-            <div className="animate-fade-up mb-8 flex flex-wrap items-center gap-2" style={{ animationDelay: "0.05s" }}>
+            {/* MAJOR ACTIVITY LINKS — one compact row (never wraps) */}
+            <div className="animate-fade-up mb-8 flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar sm:gap-2" style={{ animationDelay: "0.05s" }}>
               {QUICK_ACTIONS.map((q) => (
                 <button
                   key={q.tab}
                   onClick={() => go(q.tab)}
-                  className="group flex items-center gap-2.5 rounded-2xl border border-white/15 bg-white/8 px-4 py-2.5 backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:bg-flag-gold hover:border-flag-gold hover:shadow-glow-gold cursor-pointer"
+                  className="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-white/8 px-3 py-1.5 backdrop-blur-xl transition-all duration-200 hover:bg-flag-gold hover:border-flag-gold hover:shadow-glow-gold cursor-pointer sm:gap-2 sm:px-3.5 sm:py-2"
                   title={q.hint}
                 >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-flag-red/90 text-cream shadow-md transition-colors group-hover:bg-ink group-hover:text-flag-gold">
-                    <q.icon size={15} />
-                  </span>
-                  <span className="text-left">
-                    <span className="block text-sm font-bold leading-none text-cream group-hover:text-ink">{q.label}</span>
-                    <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wider text-cream/50 group-hover:text-ink/60">{q.hint}</span>
+                  <q.icon size={14} className="text-flag-gold transition-colors group-hover:text-ink sm:size-[15px]" />
+                  <span className="whitespace-nowrap text-[11px] font-bold leading-none text-cream transition-colors group-hover:text-ink sm:text-xs">
+                    {q.label}
                   </span>
                 </button>
               ))}
@@ -1229,26 +1226,26 @@ function MembersMarquee({
             className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-ink to-transparent"
             aria-hidden
           />
-          <div className="flex w-max animate-marquee gap-3 pr-3 group-hover:[animation-play-state:paused]">
+          <div className="flex w-max animate-marquee gap-3.5 pr-3.5 group-hover:[animation-play-state:paused] sm:gap-5 sm:pr-5">
             {[0, 1].map((copy) => (
-              <div key={copy} aria-hidden={copy === 1} className="flex gap-3">
+              <div key={copy} aria-hidden={copy === 1} className="flex gap-3.5 sm:gap-5">
                 {members.map((m) => (
                   <button
                     key={`${m.id}-${copy}`}
                     onClick={() => setPeek(m)}
-                    className="group/av relative block h-12 w-12 shrink-0 cursor-pointer rounded-full"
+                    className="group/av relative block h-14 w-14 shrink-0 cursor-pointer rounded-full sm:h-16 sm:w-16"
                     title={`${m.name} — ${m.online ? "Online now" : "Offline"}`}
                     aria-label={`${m.name}, ${m.online ? "online" : "offline"}`}
                   >
                     <Avatar
                       name={m.name}
-                      size={48}
+                      size={56}
                       src={m.avatarImage}
-                      className="ring-2 ring-cream/20 transition-all duration-200 group-hover/av:ring-flag-gold group-hover/av:shadow-glow-gold"
+                      className="ring-2 ring-cream/20 transition-all duration-200 group-hover/av:ring-flag-gold group-hover/av:shadow-glow-gold sm:!h-16 sm:!w-16"
                     />
                     <span
                       className={cn(
-                        "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-ink",
+                        "absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full ring-2 ring-ink",
                         m.online ? "bg-flag-green" : "bg-cream/25",
                       )}
                       aria-hidden
